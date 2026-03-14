@@ -1,6 +1,23 @@
-// Configuration
-const API_BASE_URL = ''; // Leave empty if same domain, otherwise set to your API Gateway URL
-// Example: const API_BASE_URL = 'https://abc123.execute-api.us-east-1.amazonaws.com/dev';
+// Configuration: use window.HEATGRID_API_BASE_URL when set (e.g. by Amplify / index.html for API Gateway)
+const API_BASE_URL = (typeof window !== 'undefined' && window.HEATGRID_API_BASE_URL != null && window.HEATGRID_API_BASE_URL !== '')
+  ? window.HEATGRID_API_BASE_URL.replace(/\/$/, '')  // no trailing slash
+  : '';
+
+// Ohio seed data fallback when API is not available (e.g. static deploy or no server)
+const OHIO_HEAT_SOURCES_FALLBACK = [
+  { id: "ohio-source-1", name: "Cleveland Industrial Plant", industry: "Manufacturing", latitude: 41.4993, longitude: -81.6944, estimatedWasteHeatMWhPerYear: 12000, recoverableHeatMWhPerYear: 6000, temperatureClass: "high", operatingHoursPerYear: 8760 },
+  { id: "ohio-source-2", name: "Columbus Data Center", industry: "Technology", latitude: 39.9612, longitude: -82.9988, estimatedWasteHeatMWhPerYear: 8000, recoverableHeatMWhPerYear: 4000, temperatureClass: "medium", operatingHoursPerYear: 8760 },
+  { id: "ohio-source-3", name: "Cincinnati Refinery", industry: "Oil & Gas", latitude: 39.1031, longitude: -84.512, estimatedWasteHeatMWhPerYear: 25000, recoverableHeatMWhPerYear: 12500, temperatureClass: "high", operatingHoursPerYear: 8760 },
+  { id: "ohio-source-4", name: "Toledo Glass Factory", industry: "Manufacturing", latitude: 41.6528, longitude: -83.5378, estimatedWasteHeatMWhPerYear: 6000, recoverableHeatMWhPerYear: 3000, temperatureClass: "high", operatingHoursPerYear: 7200 },
+  { id: "ohio-source-5", name: "Akron Rubber Plant", industry: "Manufacturing", latitude: 41.0814, longitude: -81.519, estimatedWasteHeatMWhPerYear: 5000, recoverableHeatMWhPerYear: 2500, temperatureClass: "medium", operatingHoursPerYear: 8760 }
+];
+const OHIO_HEAT_CONSUMERS_FALLBACK = [
+  { id: "ohio-consumer-1", name: "Cleveland District Heating Network", category: "District Heating", latitude: 41.5052, longitude: -81.6934, annualHeatDemandMWh: 15000 },
+  { id: "ohio-consumer-2", name: "Columbus Hospital Complex", category: "Healthcare", latitude: 39.9652, longitude: -83.0008, annualHeatDemandMWh: 8000 },
+  { id: "ohio-consumer-3", name: "Cincinnati Apartment Complex", category: "Residential", latitude: 39.1105, longitude: -84.505, annualHeatDemandMWh: 3000 },
+  { id: "ohio-consumer-4", name: "Toledo Greenhouse Facility", category: "Agriculture", latitude: 41.6588, longitude: -83.5418, annualHeatDemandMWh: 5000 },
+  { id: "ohio-consumer-5", name: "Akron Food Processing Plant", category: "Food Processing", latitude: 41.0865, longitude: -81.523, annualHeatDemandMWh: 4000 }
+];
 
 // Global variables
 let map;
@@ -167,18 +184,18 @@ async function loadData(searchQuery = '') {
         if (sourcesResponse.ok) {
             sourcesData = await sourcesResponse.json();
         } else {
-            console.warn('Failed to fetch sources, using empty array');
+            console.warn('API not available for sources, using Ohio seed fallback');
         }
         
         if (consumersResponse.ok) {
             consumersData = await consumersResponse.json();
         } else {
-            console.warn('Failed to fetch consumers, using empty array');
+            console.warn('API not available for consumers, using Ohio seed fallback');
         }
         
-        // Update global variables
-        sources = sourcesData.heatSources || sourcesData || [];
-        consumers = consumersData.heatConsumers || consumersData || [];
+        // Update global variables; use Ohio fallback when API returned no data
+        sources = (sourcesData.heatSources && sourcesData.heatSources.length) ? (sourcesData.heatSources || []) : OHIO_HEAT_SOURCES_FALLBACK;
+        consumers = (consumersData.heatConsumers && consumersData.heatConsumers.length) ? (consumersData.heatConsumers || []) : OHIO_HEAT_CONSUMERS_FALLBACK;
         
         console.log(`Loaded ${sources.length} sources, ${consumers.length} consumers`);
         
@@ -196,7 +213,12 @@ async function loadData(searchQuery = '') {
         
     } catch (error) {
         console.error('Error loading data:', error);
-        showError('rankingsBody', 'Failed to load data. Check your connection.');
+        sources = OHIO_HEAT_SOURCES_FALLBACK;
+        consumers = OHIO_HEAT_CONSUMERS_FALLBACK;
+        if (mapInitialized) updateMarkers();
+        updateSelectors();
+        updateMarkerCounts();
+        showError('rankingsBody', 'Using Ohio seed data (API unavailable).');
     }
 }
 

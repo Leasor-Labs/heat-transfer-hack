@@ -1,8 +1,10 @@
 /**
  * HTTP server that exposes the backend API for the HeatGrid frontend.
  * Serves API routes and optionally static files (index.html, script.js, styles.css).
+ * Run: npm run dev then open http://localhost:3000
  */
 
+import path from "path";
 import express from "express";
 import {
   handleGetHeatSources,
@@ -90,7 +92,7 @@ app.get("/api/map-style", (req, res) => {
 });
 
 // Serve static files from project root so GET / returns index.html
-app.use(express.static(__dirname + "/.."));
+app.use(express.static(path.join(__dirname, "..")));
 
 app.listen(PORT, () => {
   console.log(`HeatGrid API and static files: http://localhost:${PORT}`);
