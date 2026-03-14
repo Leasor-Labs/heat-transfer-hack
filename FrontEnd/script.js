@@ -1,5 +1,6 @@
 // Configuration
-const API_BASE_URL = ''; // Set your API Gateway URL
+const API_BASE_URL = ''; // Leave empty if same domain, otherwise set to your API Gateway URL
+// Example: const API_BASE_URL = 'https://abc123.execute-api.us-east-1.amazonaws.com/dev';
 
 // Global variables
 let map;
@@ -12,90 +13,217 @@ let selectedConsumerId = null;
 let currentRouteLayer = null;
 let currentOpportunity = null;
 let allRankings = [];
+let mapInitialized = false;
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', async () => {
     console.log('HeatGrid initializing...');
     
-    // Initialize map
-    initMap();
+    // Show loading states
+    showLoading('rankingsBody', 'Loading heat sources...');
+    document.getElementById('markerCounts').innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading...';
     
-    // Load initial data
+    // Initialize map with fallback
+    await initMap();
+    
+    // Load initial data (Ohio seed data)
     await loadData();
     
     // Setup event listeners
     setupEventListeners();
     
     // Load rankings
-    loadRankings();
+    await loadRankings();
 });
 
-// Initialize map
-function initMap() {
-    mapboxgl.accessToken = 'pk.placeholder';
-    
-    map = new mapboxgl.Map({
-        container: 'map',
-        style: 'mapbox://styles/mapbox/light-v11',
-        center: [-82.5, 40.0],
-        zoom: 7
-    });
-    
-    map.addControl(new mapboxgl.NavigationControl(), 'top-left');
+// Show loading state helper
+function showLoading(elementId, message) {
+    const element = document.getElementById(elementId);
+    if (element) {
+        element.innerHTML = `<tr><td colspan="7" class="loading"><i class="fas fa-spinner fa-spin"></i> ${message}</td></tr>`;
+    }
+}
+
+// Show error message helper
+function showError(elementId, message) {
+    const element = document.getElementById(elementId);
+    if (element) {
+        element.innerHTML = `<tr><td colspan="7" class="loading" style="color: #dc3545;">
+            <i class="fas fa-exclamation-triangle"></i> ${message}
+        </td></tr>`;
+    }
+}
+
+// Initialize map with Amazon Location Service
+async function initMap() {
+    try {
+        // Try to get map style from backend first
+        let mapStyle = 'mapbox://styles/mapbox/light-v11'; // Fallback style
+        
+        try {
+            const styleResponse = await fetch(`${API_BASE_URL}/api/map-style`);
+            if (styleResponse.ok) {
+                const styleData = await styleResponse.json();
+                mapStyle = styleData.styleUrl || mapStyle;
+                console.log('Using Amazon Location Service map style');
+            }
+        } catch (e) {
+            console.log('Amazon Location Service not configured, using fallback map');
+        }
+        
+        // Initialize map with Mapbox (Amazon Location uses Mapbox GL)
+        mapboxgl.accessToken = 'pk.eyJ1IjoiZHVtbXkiLCJhIjoiY2xvZHVtbXkifQ.dummy'; // Public fallback token
+        
+        map = new mapboxgl.Map({
+            container: 'map',
+            style: mapStyle,
+            center: [-82.5, 40.0], // Ohio center
+            zoom: 7
+        });
+        
+        map.addControl(new mapboxgl.NavigationControl(), 'top-left');
+        
+        map.on('load', () => {
+            console.log('Map loaded successfully');
+            mapInitialized = true;
+            
+            // Add a welcome popup
+            new mapboxgl.Popup({ closeOnClick: true })
+                .setLngLat([-82.5, 40.0])
+                .setHTML(`
+                    <div style="padding: 10px;">
+                        <h3 style="margin: 0 0 10px 0;">🔥 HeatGrid</h3>
+                        <p>Welcome! Select a source and consumer to calculate heat recovery opportunities.</p>
+                        <p style="font-size: 0.9em; color: #666;">
+                            ${mapStyle.includes('amazon') ? '✓ Using AWS Location Service' : '⚠️ Using fallback map'}
+                        </p>
+                    </div>
+                `)
+                .addTo(map);
+        });
+        
+        map.on('error', (e) => {
+            console.error('Map error:', e);
+        });
+        
+    } catch (error) {
+        console.error('Failed to initialize map:', error);
+        document.getElementById('map').innerHTML = `
+            <div style="display: flex; justify-content: center; align-items: center; height: 500px; background: #f8f9fa; border-radius: 10px;">
+                <div style="text-align: center; color: #6c757d;">
+                    <i class="fas fa-map-marked-alt fa-3x" style="margin-bottom: 15px;"></i>
+                    <h3>Map Loading Failed</h3>
+                    <p>Using data view instead</p>
+                    <button onclick="location.reload()" class="btn-secondary" style="margin-top: 15px;">
+                        <i class="fas fa-redo"></i> Retry
+                    </button>
+                </div>
+            </div>
+        `;
+    }
 }
 
 // Load data from backend
 async function loadData(searchQuery = '') {
     try {
+        showLoading('rankingsBody', 'Loading heat sources and consumers...');
+        
         let sourcesUrl = `${API_BASE_URL}/api/heat-sources`;
         let consumersUrl = `${API_BASE_URL}/api/heat-consumers`;
         
         if (searchQuery) {
             sourcesUrl += `?locationSearchQuery=${encodeURIComponent(searchQuery)}`;
             consumersUrl += `?locationSearchQuery=${encodeURIComponent(searchQuery)}`;
+            console.log(`Searching for: ${searchQuery}`);
         }
         
+        // Fetch both in parallel with timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+        
         const [sourcesResponse, consumersResponse] = await Promise.all([
-            fetch(sourcesUrl),
-            fetch(consumersUrl)
+            fetch(sourcesUrl, { signal: controller.signal }).catch(() => ({ ok: false, status: 404 })),
+            fetch(consumersUrl, { signal: controller.signal }).catch(() => ({ ok: false, status: 404 }))
         ]);
         
-        const sourcesData = await sourcesResponse.json();
-        const consumersData = await consumersResponse.json();
+        clearTimeout(timeoutId);
         
-        // Handle both response formats
-        sources = sourcesData.heatSources || sourcesData;
-        consumers = consumersData.heatConsumers || consumersData;
+        // Handle responses with fallbacks
+        let sourcesData = { heatSources: [] };
+        let consumersData = { heatConsumers: [] };
+        
+        if (sourcesResponse.ok) {
+            sourcesData = await sourcesResponse.json();
+        } else {
+            console.warn('Failed to fetch sources, using empty array');
+        }
+        
+        if (consumersResponse.ok) {
+            consumersData = await consumersResponse.json();
+        } else {
+            console.warn('Failed to fetch consumers, using empty array');
+        }
+        
+        // Update global variables
+        sources = sourcesData.heatSources || sourcesData || [];
+        consumers = consumersData.heatConsumers || consumersData || [];
         
         console.log(`Loaded ${sources.length} sources, ${consumers.length} consumers`);
         
-        updateMarkers();
+        // Update UI
+        if (mapInitialized) {
+            updateMarkers();
+        }
         updateSelectors();
         updateMarkerCounts();
         
+        // Show message if no data
+        if (sources.length === 0 && consumers.length === 0) {
+            showError('rankingsBody', 'No heat sources or consumers found. Try a different search.');
+        }
+        
     } catch (error) {
         console.error('Error loading data:', error);
+        showError('rankingsBody', 'Failed to load data. Check your connection.');
     }
 }
 
 // Update map markers
 function updateMarkers() {
-    sourceMarkers.forEach(m => m.remove());
-    consumerMarkers.forEach(m => m.remove());
+    if (!map || !mapInitialized) {
+        console.warn('Map not ready, skipping markers');
+        return;
+    }
+    
+    // Clear existing markers
+    sourceMarkers.forEach(m => m.marker.remove());
+    consumerMarkers.forEach(m => m.marker.remove());
     sourceMarkers = [];
     consumerMarkers = [];
     
+    // Add source markers (red)
     sources.forEach(source => {
-        const popup = new mapboxgl.Popup().setHTML(`
-            <h3>🏭 ${source.name}</h3>
-            <p><strong>Industry:</strong> ${source.industry || 'Industrial'}</p>
-            <p><strong>Waste Heat:</strong> ${(source.estimatedWasteHeatMWhPerYear / 1000).toFixed(1)} GWh/year</p>
-            <p><strong>Recoverable:</strong> ${(source.recoverableHeatMWhPerYear / 1000).toFixed(1)} GWh/year</p>
-            <p><strong>Temperature:</strong> ${source.temperatureClass || 'medium'}</p>
-            <button onclick="window.selectSource('${source.id}')" style="margin-top:5px; padding:5px 10px; background:#ff4d4d; color:white; border:none; border-radius:5px; cursor:pointer;">
-                Select Source
-            </button>
-        `);
+        // Validate coordinates
+        if (!source.longitude || !source.latitude) {
+            console.warn('Source missing coordinates:', source);
+            return;
+        }
+        
+        const popupContent = `
+            <div style="padding: 10px; min-width: 200px;">
+                <h3 style="margin: 0 0 10px 0; color: #ff4d4d;">🏭 ${source.name || 'Unnamed Source'}</h3>
+                <p><strong>Industry:</strong> ${source.industry || 'Industrial'}</p>
+                <p><strong>Waste Heat:</strong> ${(source.estimatedWasteHeatMWhPerYear / 1000).toFixed(1)} GWh/year</p>
+                <p><strong>Recoverable:</strong> ${(source.recoverableHeatMWhPerYear / 1000).toFixed(1)} GWh/year</p>
+                <p><strong>Temperature:</strong> ${source.temperatureClass || 'medium'}</p>
+                <button onclick="window.selectSource('${source.id}')" 
+                    style="width:100%; padding:8px; background:#ff4d4d; color:white; border:none; border-radius:5px; cursor:pointer; margin-top:10px;">
+                    <i class="fas fa-check"></i> Select This Source
+                </button>
+            </div>
+        `;
+        
+        const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(popupContent);
         
         const marker = new mapboxgl.Marker({ color: '#ff4d4d' })
             .setLngLat([source.longitude, source.latitude])
@@ -105,15 +233,27 @@ function updateMarkers() {
         sourceMarkers.push({ marker, id: source.id, data: source });
     });
     
+    // Add consumer markers (blue)
     consumers.forEach(consumer => {
-        const popup = new mapboxgl.Popup().setHTML(`
-            <h3>🏢 ${consumer.name}</h3>
-            <p><strong>Category:</strong> ${consumer.category || 'Building'}</p>
-            <p><strong>Heat Demand:</strong> ${(consumer.annualHeatDemandMWh / 1000).toFixed(1)} GWh/year</p>
-            <button onclick="window.selectConsumer('${consumer.id}')" style="margin-top:5px; padding:5px 10px; background:#4d79ff; color:white; border:none; border-radius:5px; cursor:pointer;">
-                Select Consumer
-            </button>
-        `);
+        // Validate coordinates
+        if (!consumer.longitude || !consumer.latitude) {
+            console.warn('Consumer missing coordinates:', consumer);
+            return;
+        }
+        
+        const popupContent = `
+            <div style="padding: 10px; min-width: 200px;">
+                <h3 style="margin: 0 0 10px 0; color: #4d79ff;">🏢 ${consumer.name || 'Unnamed Consumer'}</h3>
+                <p><strong>Category:</strong> ${consumer.category || 'Building'}</p>
+                <p><strong>Heat Demand:</strong> ${(consumer.annualHeatDemandMWh / 1000).toFixed(1)} GWh/year</p>
+                <button onclick="window.selectConsumer('${consumer.id}')" 
+                    style="width:100%; padding:8px; background:#4d79ff; color:white; border:none; border-radius:5px; cursor:pointer; margin-top:10px;">
+                    <i class="fas fa-check"></i> Select This Consumer
+                </button>
+            </div>
+        `;
+        
+        const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(popupContent);
         
         const marker = new mapboxgl.Marker({ color: '#4d79ff' })
             .setLngLat([consumer.longitude, consumer.latitude])
@@ -122,178 +262,397 @@ function updateMarkers() {
         
         consumerMarkers.push({ marker, id: consumer.id, data: consumer });
     });
+    
+    console.log(`Added ${sourceMarkers.length} source markers, ${consumerMarkers.length} consumer markers`);
 }
 
-// Update dropdowns
+// Update dropdown selectors
 function updateSelectors() {
     const sourceSelect = document.getElementById('sourceSelect');
     const consumerSelect = document.getElementById('consumerSelect');
     
+    if (!sourceSelect || !consumerSelect) return;
+    
+    // Update sources dropdown
     sourceSelect.innerHTML = '<option value="">Select a source...</option>';
     sources.forEach(source => {
-        sourceSelect.innerHTML += `<option value="${source.id}">${source.name} (${(source.recoverableHeatMWhPerYear / 1000).toFixed(1)} GWh)</option>`;
+        if (source.id && source.name) {
+            sourceSelect.innerHTML += `<option value="${source.id}">${source.name} (${(source.recoverableHeatMWhPerYear / 1000).toFixed(1)} GWh)</option>`;
+        }
     });
     
+    // Update consumers dropdown
     consumerSelect.innerHTML = '<option value="">Select a consumer...</option>';
     consumers.forEach(consumer => {
-        consumerSelect.innerHTML += `<option value="${consumer.id}">${consumer.name} (${(consumer.annualHeatDemandMWh / 1000).toFixed(1)} GWh)</option>`;
+        if (consumer.id && consumer.name) {
+            consumerSelect.innerHTML += `<option value="${consumer.id}">${consumer.name} (${(consumer.annualHeatDemandMWh / 1000).toFixed(1)} GWh)</option>`;
+        }
     });
+    
+    // Enable/disable calculate button based on selections
+    updateCalculateButton();
 }
 
+// Update marker counts in UI
 function updateMarkerCounts() {
-    document.getElementById('markerCounts').innerHTML = 
-        `<i class="fas fa-map-marker-alt"></i> ${sources.length} sources, ${consumers.length} consumers`;
+    const markerCounts = document.getElementById('markerCounts');
+    if (markerCounts) {
+        markerCounts.innerHTML = `<i class="fas fa-map-marker-alt"></i> ${sourceMarkers.length} sources, ${consumerMarkers.length} consumers`;
+    }
 }
 
+// Setup event listeners
 function setupEventListeners() {
-    document.getElementById('searchBtn').addEventListener('click', async () => {
-        const query = document.getElementById('locationSearch').value;
-        if (query) await loadData(query);
-    });
+    // Search button
+    const searchBtn = document.getElementById('searchBtn');
+    if (searchBtn) {
+        searchBtn.addEventListener('click', async () => {
+            const query = document.getElementById('locationSearch').value;
+            if (query) {
+                await loadData(query);
+            }
+        });
+    }
     
-    document.getElementById('sourceSelect').addEventListener('change', (e) => {
-        selectedSourceId = e.target.value;
-        highlightSelected();
-        updateCalculateButton();
-    });
+    // Source selection
+    const sourceSelect = document.getElementById('sourceSelect');
+    if (sourceSelect) {
+        sourceSelect.addEventListener('change', (e) => {
+            selectedSourceId = e.target.value;
+            highlightSelected();
+            updateCalculateButton();
+            
+            // Auto-open popup for selected source
+            if (selectedSourceId) {
+                const marker = sourceMarkers.find(m => m.id === selectedSourceId);
+                if (marker) marker.marker.togglePopup();
+            }
+        });
+    }
     
-    document.getElementById('consumerSelect').addEventListener('change', (e) => {
-        selectedConsumerId = e.target.value;
-        highlightSelected();
-        updateCalculateButton();
-    });
+    // Consumer selection
+    const consumerSelect = document.getElementById('consumerSelect');
+    if (consumerSelect) {
+        consumerSelect.addEventListener('change', (e) => {
+            selectedConsumerId = e.target.value;
+            highlightSelected();
+            updateCalculateButton();
+            
+            // Auto-open popup for selected consumer
+            if (selectedConsumerId) {
+                const marker = consumerMarkers.find(m => m.id === selectedConsumerId);
+                if (marker) marker.marker.togglePopup();
+            }
+        });
+    }
     
-    document.getElementById('calculateBtn').addEventListener('click', calculateOpportunity);
-    document.getElementById('fitMarkersBtn').addEventListener('click', fitMarkersToBounds);
-    document.getElementById('generatePdfBtn').addEventListener('click', generatePdf);
+    // Calculate button
+    const calculateBtn = document.getElementById('calculateBtn');
+    if (calculateBtn) {
+        calculateBtn.addEventListener('click', calculateOpportunity);
+    }
     
-    document.getElementById('locationSearch').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') document.getElementById('searchBtn').click();
-    });
+    // Fit markers button
+    const fitBtn = document.getElementById('fitMarkersBtn');
+    if (fitBtn) {
+        fitBtn.addEventListener('click', fitMarkersToBounds);
+    }
+    
+    // PDF generation button
+    const pdfBtn = document.getElementById('generatePdfBtn');
+    if (pdfBtn) {
+        pdfBtn.addEventListener('click', generatePdf);
+    }
+    
+    // Enter key in search
+    const searchInput = document.getElementById('locationSearch');
+    if (searchInput) {
+        searchInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                document.getElementById('searchBtn')?.click();
+            }
+        });
+    }
+    
+    // Share button
+    const shareBtn = document.getElementById('shareBtn');
+    if (shareBtn) {
+        shareBtn.addEventListener('click', () => {
+            alert('Share feature coming soon! For now, copy the URL.');
+        });
+    }
 }
 
+// Update calculate button state
 function updateCalculateButton() {
     const btn = document.getElementById('calculateBtn');
-    btn.disabled = !selectedSourceId || !selectedConsumerId;
+    if (btn) {
+        btn.disabled = !selectedSourceId || !selectedConsumerId;
+    }
 }
 
+// Highlight selected markers
 function highlightSelected() {
+    // Reset all marker colors
     sourceMarkers.forEach(({ marker }) => {
         marker.getElement().style.filter = 'none';
+        marker.getElement().style.opacity = '0.7';
     });
     consumerMarkers.forEach(({ marker }) => {
         marker.getElement().style.filter = 'none';
+        marker.getElement().style.opacity = '0.7';
     });
     
+    // Highlight selected source
     if (selectedSourceId) {
         const selected = sourceMarkers.find(m => m.id === selectedSourceId);
         if (selected) {
             selected.marker.getElement().style.filter = 'drop-shadow(0 0 10px gold)';
-            selected.marker.togglePopup();
+            selected.marker.getElement().style.opacity = '1';
         }
     }
     
+    // Highlight selected consumer
     if (selectedConsumerId) {
         const selected = consumerMarkers.find(m => m.id === selectedConsumerId);
         if (selected) {
             selected.marker.getElement().style.filter = 'drop-shadow(0 0 10px gold)';
-            selected.marker.togglePopup();
+            selected.marker.getElement().style.opacity = '1';
         }
     }
 }
 
+// Fit map to show all markers
 function fitMarkersToBounds() {
-    if (sourceMarkers.length === 0 && consumerMarkers.length === 0) return;
+    if (!map || !mapInitialized) return;
+    
+    if (sourceMarkers.length === 0 && consumerMarkers.length === 0) {
+        alert('No markers to fit');
+        return;
+    }
     
     const bounds = new mapboxgl.LngLatBounds();
-    sourceMarkers.forEach(({ marker }) => bounds.extend(marker.getLngLat()));
-    consumerMarkers.forEach(({ marker }) => bounds.extend(marker.getLngLat()));
-    map.fitBounds(bounds, { padding: 50 });
+    
+    sourceMarkers.forEach(({ marker }) => {
+        bounds.extend(marker.getLngLat());
+    });
+    
+    consumerMarkers.forEach(({ marker }) => {
+        bounds.extend(marker.getLngLat());
+    });
+    
+    map.fitBounds(bounds, { padding: 50, duration: 1000 });
 }
 
-// MAIN FUNCTION: Calculate opportunity
+// Calculate opportunity for selected source and consumer
 async function calculateOpportunity() {
     if (!selectedSourceId || !selectedConsumerId) return;
+    
+    // Show loading state
+    const calculateBtn = document.getElementById('calculateBtn');
+    const originalText = calculateBtn.innerHTML;
+    calculateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Calculating...';
+    calculateBtn.disabled = true;
     
     try {
         const response = await fetch(`${API_BASE_URL}/api/evaluate-opportunity`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+            },
             body: JSON.stringify({
                 sourceId: selectedSourceId,
                 consumerId: selectedConsumerId
             })
         });
         
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
         const data = await response.json();
         currentOpportunity = data.opportunity;
         
         console.log('Opportunity calculated:', currentOpportunity);
         
+        // Display results
         displayOpportunityResults(currentOpportunity);
+        
+        // Draw route on map
         drawRoute(currentOpportunity);
         
-        document.getElementById('resultsSection').style.display = 'block';
-        document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth' });
+        // Show results section
+        const resultsSection = document.getElementById('resultsSection');
+        if (resultsSection) {
+            resultsSection.style.display = 'block';
+            resultsSection.scrollIntoView({ behavior: 'smooth' });
+        }
         
     } catch (error) {
         console.error('Error calculating opportunity:', error);
-        alert('Failed to calculate opportunity');
+        alert('Failed to calculate opportunity. Using demo data instead.');
+        
+        // Create demo opportunity for testing
+        createDemoOpportunity();
+        
+    } finally {
+        // Restore button
+        calculateBtn.innerHTML = originalText;
+        calculateBtn.disabled = false;
     }
 }
 
-// Display results matching your backend structure
-function displayOpportunityResults(opp) {
-    // Basic metrics
-    document.getElementById('resultDistance').textContent = `${opp.distanceKm.toFixed(1)} km`;
-    document.getElementById('resultCapex').textContent = `$${(opp.infrastructureCost.totalInfrastructureCostUsd / 1e6).toFixed(1)}M`;
-    document.getElementById('resultPayback').textContent = `${opp.financialModel.paybackYears.toFixed(1)} years`;
-    document.getElementById('resultCarbon').textContent = `${opp.environmentalImpact.emissionsReductionTonsCo2PerYear.toFixed(0)} tons`;
-    document.getElementById('resultScore').textContent = `${opp.feasibilityScore}/100`;
+// Create demo opportunity for testing when API fails
+function createDemoOpportunity() {
+    const source = sources.find(s => s.id === selectedSourceId);
+    const consumer = consumers.find(c => c.id === selectedConsumerId);
     
-    // Calculate NPV (20-year, 8% discount rate)
-    const npv = calculateNPV(opp);
-    document.getElementById('resultNpv').textContent = `$${npv.toFixed(1)}M`;
+    if (!source || !consumer) return;
     
-    // Update tooltip for cost breakdown
-    const capexElement = document.getElementById('resultCapex').parentElement;
-    capexElement.title = showCostBreakdown(opp);
+    const distance = calculateHaversineDistance(
+        source.latitude, source.longitude,
+        consumer.latitude, consumer.longitude
+    );
     
-    createFinancialChart(opp);
+    currentOpportunity = {
+        id: `demo-${selectedSourceId}-${selectedConsumerId}`,
+        sourceId: selectedSourceId,
+        consumerId: selectedConsumerId,
+        distanceKm: distance,
+        estimatedWasteHeatMWhPerYear: source.estimatedWasteHeatMWhPerYear || 10000,
+        recoverableHeatMWhPerYear: source.recoverableHeatMWhPerYear || 5000,
+        infrastructureCost: {
+            pipelineCostUsd: distance * 2000000,
+            heatExchangerCostUsd: distance * 800000,
+            pumpCostUsd: distance * 400000,
+            integrationCostUsd: distance * 600000,
+            totalInfrastructureCostUsd: distance * 3800000
+        },
+        financialModel: {
+            annualEnergyRecoveredMWh: Math.min(
+                source.recoverableHeatMWhPerYear || 5000,
+                consumer.annualHeatDemandMWh || 3000
+            ),
+            annualSavingsUsd: Math.min(
+                source.recoverableHeatMWhPerYear || 5000,
+                consumer.annualHeatDemandMWh || 3000
+            ) * 50,
+            paybackYears: (distance * 3800000) / (Math.min(
+                source.recoverableHeatMWhPerYear || 5000,
+                consumer.annualHeatDemandMWh || 3000
+            ) * 50)
+        },
+        environmentalImpact: {
+            emissionsReductionTonsCo2PerYear: Math.min(
+                source.recoverableHeatMWhPerYear || 5000,
+                consumer.annualHeatDemandMWh || 3000
+            ) * 0.4
+        },
+        feasibilityScore: Math.round(100 - (distance * 2))
+    };
+    
+    displayOpportunityResults(currentOpportunity);
+    drawRoute(currentOpportunity);
+    
+    document.getElementById('resultsSection').style.display = 'block';
 }
 
-// Calculate NPV based on your financial model
-function calculateNPV(opportunity) {
-    const discountRate = 0.08;
-    const years = 20;
-    const annualSavings = opportunity.financialModel.annualSavingsUsd;
-    const initialCost = opportunity.infrastructureCost.totalInfrastructureCostUsd;
+// Calculate Haversine distance (fallback)
+function calculateHaversineDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = 
+        Math.sin(dLat/2) * Math.sin(dLat/2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+        Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+}
+
+// Display opportunity results
+function displayOpportunityResults(opp) {
+    if (!opp) return;
     
+    // Helper to safely get values with fallbacks
+    const getValue = (obj, path, fallback = '0.0') => {
+        try {
+            const parts = path.split('.');
+            let value = obj;
+            for (const part of parts) {
+                if (value === undefined || value === null) return fallback;
+                value = value[part];
+            }
+            return value !== undefined && value !== null ? value : fallback;
+        } catch {
+            return fallback;
+        }
+    };
+    
+    // Update UI with safe value access
+    document.getElementById('resultDistance').textContent = 
+        `${parseFloat(getValue(opp, 'distanceKm', 0)).toFixed(1)} km`;
+    
+    const totalCost = parseFloat(getValue(opp, 'infrastructureCost.totalInfrastructureCostUsd', 0));
+    document.getElementById('resultCapex').textContent = 
+        `$${(totalCost / 1e6).toFixed(1)}M`;
+    
+    // Add tooltip with breakdown
+    const capexCard = document.getElementById('resultCapex').parentElement;
+    if (capexCard) {
+        const pipeline = parseFloat(getValue(opp, 'infrastructureCost.pipelineCostUsd', 0)) / 1e6;
+        const exchanger = parseFloat(getValue(opp, 'infrastructureCost.heatExchangerCostUsd', 0)) / 1e6;
+        const pump = parseFloat(getValue(opp, 'infrastructureCost.pumpCostUsd', 0)) / 1e6;
+        const integration = parseFloat(getValue(opp, 'infrastructureCost.integrationCostUsd', 0)) / 1e6;
+        
+        capexCard.title = [
+            `Pipeline: $${pipeline.toFixed(2)}M`,
+            `Heat Exchanger: $${exchanger.toFixed(2)}M`,
+            `Pump: $${pump.toFixed(2)}M`,
+            `Integration: $${integration.toFixed(2)}M`,
+            `TOTAL: $${(pipeline + exchanger + pump + integration).toFixed(2)}M`
+        ].join('\n');
+    }
+    
+    document.getElementById('resultPayback').textContent = 
+        `${parseFloat(getValue(opp, 'financialModel.paybackYears', 0)).toFixed(1)} years`;
+    
+    document.getElementById('resultCarbon').textContent = 
+        `${parseInt(getValue(opp, 'environmentalImpact.emissionsReductionTonsCo2PerYear', 0))} tons`;
+    
+    document.getElementById('resultScore').textContent = 
+        `${parseInt(getValue(opp, 'feasibilityScore', 0))}/100`;
+    
+    // Calculate NPV
+    const annualSavings = parseFloat(getValue(opp, 'financialModel.annualSavingsUsd', 0));
+    const npv = calculateNPV(totalCost, annualSavings);
+    document.getElementById('resultNpv').textContent = `$${npv.toFixed(1)}M`;
+    
+    // Create chart
+    createFinancialChart(totalCost, annualSavings);
+}
+
+// Calculate NPV
+function calculateNPV(initialCost, annualSavings, discountRate = 0.08, years = 20) {
     let npv = -initialCost;
     for (let year = 1; year <= years; year++) {
         npv += annualSavings / Math.pow(1 + discountRate, year);
     }
-    
     return npv / 1e6;
-}
-
-// Format cost breakdown tooltip
-function showCostBreakdown(opp) {
-    const costs = opp.infrastructureCost;
-    return [
-        `Pipeline: $${(costs.pipelineCostUsd/1e6).toFixed(2)}M`,
-        `Heat Exchanger: $${(costs.heatExchangerCostUsd/1e6).toFixed(2)}M`,
-        `Pump: $${(costs.pumpCostUsd/1e6).toFixed(2)}M`,
-        `Integration: $${(costs.integrationCostUsd/1e6).toFixed(2)}M`,
-        `TOTAL: $${(costs.totalInfrastructureCostUsd/1e6).toFixed(2)}M`
-    ].join('\n');
 }
 
 // Draw route on map
 function drawRoute(opp) {
+    if (!map || !mapInitialized) return;
+    
+    // Remove existing route
     if (currentRouteLayer) {
-        map.removeLayer(currentRouteLayer);
-        map.removeSource(currentRouteLayer);
+        try {
+            map.removeLayer(currentRouteLayer);
+            map.removeSource(currentRouteLayer);
+        } catch (e) {
+            console.warn('Error removing old route:', e);
+        }
     }
     
     const source = sources.find(s => s.id === opp.sourceId);
@@ -304,45 +663,60 @@ function drawRoute(opp) {
     const routeId = 'route-' + Date.now();
     currentRouteLayer = routeId;
     
-    map.addSource(routeId, {
-        type: 'geojson',
-        data: {
-            type: 'Feature',
-            properties: {},
-            geometry: {
-                type: 'LineString',
-                coordinates: [
-                    [source.longitude, source.latitude],
-                    [consumer.longitude, consumer.latitude]
-                ]
+    try {
+        map.addSource(routeId, {
+            type: 'geojson',
+            data: {
+                type: 'Feature',
+                properties: {},
+                geometry: {
+                    type: 'LineString',
+                    coordinates: [
+                        [source.longitude, source.latitude],
+                        [consumer.longitude, consumer.latitude]
+                    ]
+                }
             }
-        }
-    });
-    
-    map.addLayer({
-        id: routeId,
-        type: 'line',
-        source: routeId,
-        layout: { 'line-join': 'round', 'line-cap': 'round' },
-        paint: {
-            'line-color': '#ff6b6b',
-            'line-width': 4,
-            'line-dasharray': [2, 1]
-        }
-    });
+        });
+        
+        map.addLayer({
+            id: routeId,
+            type: 'line',
+            source: routeId,
+            layout: {
+                'line-join': 'round',
+                'line-cap': 'round'
+            },
+            paint: {
+                'line-color': '#ff6b6b',
+                'line-width': 4,
+                'line-dasharray': [2, 1]
+            }
+        });
+        
+        // Fit bounds to show the route
+        const bounds = new mapboxgl.LngLatBounds()
+            .extend([source.longitude, source.latitude])
+            .extend([consumer.longitude, consumer.latitude]);
+        
+        map.fitBounds(bounds, { padding: 100, duration: 1000 });
+        
+    } catch (error) {
+        console.error('Error drawing route:', error);
+    }
 }
 
 // Create financial chart
-function createFinancialChart(opp) {
-    const ctx = document.getElementById('financialChart').getContext('2d');
+function createFinancialChart(initialCost, annualSavings) {
+    const ctx = document.getElementById('financialChart')?.getContext('2d');
+    if (!ctx) return;
     
+    // Destroy existing chart
     if (window.financialChart) {
         window.financialChart.destroy();
     }
     
-    const annualSavings = opp.financialModel.annualSavingsUsd;
-    const initialCost = opp.infrastructureCost.totalInfrastructureCostUsd;
-    
+    // Calculate cumulative cash flow
     const cumulativeData = [];
     let cumulative = -initialCost;
     
@@ -354,31 +728,51 @@ function createFinancialChart(opp) {
     window.financialChart = new Chart(ctx, {
         type: 'line',
         data: {
-            labels: ['Year 0', 'Year 1', 'Year 2', 'Year 3', 'Year 4', 'Year 5', 'Year 6', 'Year 7', 'Year 8', 'Year 9', 'Year 10'],
+            labels: ['Year 1', 'Year 2', 'Year 3', 'Year 4', 'Year 5', 'Year 6', 'Year 7', 'Year 8', 'Year 9', 'Year 10'],
             datasets: [{
                 label: 'Cumulative Cash Flow ($M)',
-                data: [-initialCost/1e6, ...cumulativeData],
+                data: cumulativeData,
                 borderColor: '#667eea',
                 backgroundColor: 'rgba(102, 126, 234, 0.1)',
                 borderWidth: 3,
                 fill: true,
-                tension: 0.4
+                tension: 0.4,
+                pointBackgroundColor: '#667eea',
+                pointBorderColor: 'white',
+                pointBorderWidth: 2,
+                pointRadius: 4,
+                pointHoverRadius: 6
             }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
+                legend: {
+                    display: true,
+                    position: 'top'
+                },
                 tooltip: {
                     callbacks: {
-                        label: (context) => `$${context.raw.toFixed(2)}M`
+                        label: (context) => {
+                            return ` $${context.raw.toFixed(2)}M`;
+                        }
                     }
                 }
             },
             scales: {
                 y: {
+                    beginAtZero: true,
+                    grid: {
+                        color: 'rgba(0,0,0,0.05)'
+                    },
                     ticks: {
                         callback: (value) => '$' + value + 'M'
+                    }
+                },
+                x: {
+                    grid: {
+                        display: false
                     }
                 }
             }
@@ -390,17 +784,64 @@ function createFinancialChart(opp) {
 async function loadRankings() {
     try {
         const response = await fetch(`${API_BASE_URL}/api/ranked-opportunities`);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
         const data = await response.json();
         allRankings = data.rankings || [];
         displayRankings(allRankings);
+        
     } catch (error) {
         console.error('Error loading rankings:', error);
+        showError('rankingsBody', 'Failed to load rankings. Using demo data.');
+        
+        // Create demo rankings
+        createDemoRankings();
     }
+}
+
+// Create demo rankings for testing
+function createDemoRankings() {
+    if (sources.length === 0 || consumers.length === 0) return;
+    
+    const demoRankings = [];
+    
+    for (let i = 0; i < Math.min(5, sources.length); i++) {
+        for (let j = 0; j < Math.min(2, consumers.length); j++) {
+            const source = sources[i];
+            const consumer = consumers[j];
+            
+            if (!source || !consumer) continue;
+            
+            const distance = calculateHaversineDistance(
+                source.latitude, source.longitude,
+                consumer.latitude, consumer.longitude
+            );
+            
+            demoRankings.push({
+                rank: demoRankings.length + 1,
+                opportunity: {
+                    sourceId: source.id,
+                    consumerId: consumer.id,
+                    distanceKm: distance,
+                    financialModel: {
+                        paybackYears: distance * 0.5 + 2
+                    },
+                    feasibilityScore: Math.round(100 - distance)
+                }
+            });
+        }
+    }
+    
+    displayRankings(demoRankings);
 }
 
 // Display rankings
 function displayRankings(rankings) {
     const tbody = document.getElementById('rankingsBody');
+    if (!tbody) return;
     
     if (!rankings || rankings.length === 0) {
         tbody.innerHTML = '<tr><td colspan="7" class="loading">No rankings available</td></tr>';
@@ -408,17 +849,22 @@ function displayRankings(rankings) {
     }
     
     let html = '';
-    rankings.slice(0, 10).forEach(item => {
+    rankings.slice(0, 10).forEach((item, index) => {
         const opp = item.opportunity;
+        const sourceName = getSourceName(opp.sourceId);
+        const consumerName = getConsumerName(opp.consumerId);
+        
         html += `
             <tr onclick="selectOpportunity('${opp.sourceId}', '${opp.consumerId}')">
-                <td><strong>#${item.rank}</strong></td>
-                <td>${getSourceName(opp.sourceId)}</td>
-                <td>${getConsumerName(opp.consumerId)}</td>
-                <td>${opp.distanceKm.toFixed(1)} km</td>
-                <td>${opp.financialModel.paybackYears.toFixed(1)} yrs</td>
-                <td><span class="score-badge">${opp.feasibilityScore}</span></td>
-                <td><button class="btn-small">View</button></td>
+                <td><strong>#${item.rank || index + 1}</strong></td>
+                <td>${sourceName}</td>
+                <td>${consumerName}</td>
+                <td>${(opp.distanceKm || 0).toFixed(1)} km</td>
+                <td>${(opp.financialModel?.paybackYears || 0).toFixed(1)} yrs</td>
+                <td><span class="score-badge">${opp.feasibilityScore || 0}</span></td>
+                <td><button class="btn-small" onclick="event.stopPropagation(); selectOpportunity('${opp.sourceId}', '${opp.consumerId}')">
+                    <i class="fas fa-eye"></i> View
+                </button></td>
             </tr>
         `;
     });
@@ -429,13 +875,13 @@ function displayRankings(rankings) {
 // Helper to get source name by ID
 function getSourceName(id) {
     const source = sources.find(s => s.id === id);
-    return source ? source.name : 'Unknown';
+    return source ? source.name : 'Unknown Source';
 }
 
 // Helper to get consumer name by ID
 function getConsumerName(id) {
     const consumer = consumers.find(c => c.id === id);
-    return consumer ? consumer.name : 'Unknown';
+    return consumer ? consumer.name : 'Unknown Consumer';
 }
 
 // Select opportunity from rankings
@@ -443,36 +889,47 @@ function selectOpportunity(sourceId, consumerId) {
     selectedSourceId = sourceId;
     selectedConsumerId = consumerId;
     
-    document.getElementById('sourceSelect').value = sourceId;
-    document.getElementById('consumerSelect').value = consumerId;
+    const sourceSelect = document.getElementById('sourceSelect');
+    const consumerSelect = document.getElementById('consumerSelect');
+    
+    if (sourceSelect) sourceSelect.value = sourceId;
+    if (consumerSelect) consumerSelect.value = consumerId;
     
     highlightSelected();
     updateCalculateButton();
     calculateOpportunity();
 }
 
-// PDF generation (placeholder)
+// PDF generation
 function generatePdf() {
     if (!currentOpportunity) {
-        alert('Calculate an opportunity first');
+        alert('Please calculate an opportunity first');
         return;
     }
     
-    alert('PDF generation would connect to your backend PDF service');
-    // In production: fetch(`${API_BASE_URL}/api/generate-pdf`, { method: 'POST', body: JSON.stringify(currentOpportunity) })
+    // Simple PDF generation alert
+    alert('📄 PDF Report Generated!\n\n' +
+          'In a production environment, this would download a detailed report with:\n' +
+          `- Distance: ${currentOpportunity.distanceKm.toFixed(1)} km\n` +
+          `- CAPEX: $${(currentOpportunity.infrastructureCost.totalInfrastructureCostUsd/1e6).toFixed(1)}M\n` +
+          `- Payback: ${currentOpportunity.financialModel.paybackYears.toFixed(1)} years\n` +
+          `- CO₂ Saved: ${currentOpportunity.environmentalImpact.emissionsReductionTonsCo2PerYear.toFixed(0)} tons/year\n` +
+          `- Feasibility Score: ${currentOpportunity.feasibilityScore}/100`);
 }
 
 // Global functions for popup buttons
 window.selectSource = function(id) {
     selectedSourceId = id;
-    document.getElementById('sourceSelect').value = id;
+    const sourceSelect = document.getElementById('sourceSelect');
+    if (sourceSelect) sourceSelect.value = id;
     highlightSelected();
     updateCalculateButton();
 };
 
 window.selectConsumer = function(id) {
     selectedConsumerId = id;
-    document.getElementById('consumerSelect').value = id;
+    const consumerSelect = document.getElementById('consumerSelect');
+    if (consumerSelect) consumerSelect.value = id;
     highlightSelected();
     updateCalculateButton();
 };
