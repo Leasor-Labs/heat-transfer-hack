@@ -78,17 +78,38 @@ app.get("/api/ranked-opportunities", async (_req, res) => {
   }
 });
 
-// AWS Location Service map style (Maps v2). Requires MAP_API_KEY and AWS_REGION.
+// Map style: AWS Location Service when configured, otherwise same-origin OSM fallback (no CORS).
+const OSM_FALLBACK_STYLE = {
+  version: 8,
+  sources: {
+    osm: {
+      type: "raster",
+      tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+      tileSize: 256,
+      attribution: "© OpenStreetMap contributors",
+    },
+  },
+  layers: [
+    {
+      id: "osm-tiles",
+      type: "raster",
+      source: "osm",
+      minzoom: 0,
+      maxzoom: 19,
+    },
+  ],
+};
+
 app.get("/api/map-style", (req, res) => {
   const apiKey = process.env.MAP_API_KEY;
   const region = process.env.AWS_REGION || "us-east-1";
-  if (!apiKey) {
-    res.status(404).json({ error: "Map not configured", styleUrl: null });
+  if (apiKey) {
+    const mapStyle = process.env.MAP_STYLE || "Standard";
+    const styleUrl = `https://maps.geo.${region}.amazonaws.com/v2/styles/${mapStyle}/descriptor?key=${apiKey}`;
+    res.json({ styleUrl });
     return;
   }
-  const mapStyle = process.env.MAP_STYLE || "Standard";
-  const styleUrl = `https://maps.geo.${region}.amazonaws.com/v2/styles/${mapStyle}/descriptor?key=${apiKey}`;
-  res.json({ styleUrl });
+  res.json({ style: OSM_FALLBACK_STYLE });
 });
 
 // Serve static files from project root so GET / returns index.html

@@ -71,6 +71,22 @@ function showError(elementId, message) {
     }
 }
 
+// Inline OSM fallback (no external style URL = no CORS). Use when not served from backend.
+const OSM_FALLBACK_STYLE = {
+    version: 8,
+    sources: {
+        osm: {
+            type: 'raster',
+            tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+            tileSize: 256,
+            attribution: '© OpenStreetMap contributors'
+        }
+    },
+    layers: [
+        { id: 'osm-tiles', type: 'raster', source: 'osm', minzoom: 0, maxzoom: 19 }
+    ]
+};
+
 // Initialize map with AWS Location Service (MapLibre GL JS)
 async function initMap() {
     const mapEl = document.getElementById('map');
@@ -91,25 +107,27 @@ async function initMap() {
     }
 
     try {
-        const fallbackStyle = 'https://demotiles.maplibre.org/styles/osm-bright/style.json';
-        let mapStyle = fallbackStyle;
+        let style = OSM_FALLBACK_STYLE;
 
         try {
             const styleResponse = await fetch(`${API_BASE_URL}/api/map-style`);
             if (styleResponse.ok) {
-                const styleData = await styleResponse.json();
-                if (styleData.styleUrl) {
-                    mapStyle = styleData.styleUrl;
+                const data = await styleResponse.json();
+                if (data.styleUrl) {
+                    style = data.styleUrl;
                     console.log('Using AWS Location Service map');
+                } else if (data.style && data.style.sources) {
+                    style = data.style;
+                    console.log('Using server OSM fallback map');
                 }
             }
         } catch (e) {
-            console.log('AWS Location Service map not configured, using fallback');
+            console.log('Using inline OSM fallback map');
         }
 
         map = new maplibregl.Map({
             container: 'map',
-            style: mapStyle,
+            style: style,
             center: [-82.5, 40.0],
             zoom: 7
         });
@@ -119,7 +137,7 @@ async function initMap() {
         map.on('load', () => {
             mapInitialized = true;
             map.resize();
-            const usingAws = typeof mapStyle === 'string' && mapStyle.includes('amazonaws.com');
+            const usingAws = typeof style === 'string' && style.includes('amazonaws.com');
             new maplibregl.Popup({ closeOnClick: true })
                 .setLngLat([-82.5, 40.0])
                 .setHTML(`
