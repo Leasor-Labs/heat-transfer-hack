@@ -5,8 +5,17 @@
  * - AWS_REGION: AWS region (default us-east-1)
  */
 
-const PLACE_INDEX_NAME = process.env.PLACE_INDEX_NAME ?? "HeatAppIndex";
-const AWS_REGION = process.env.AWS_REGION ?? "us-east-1";
+function getEnv(key: string): string | undefined {
+  try {
+    const p = (globalThis as unknown as { process?: { env?: Record<string, string> } }).process;
+    return p?.env?.[key];
+  } catch {
+    return undefined;
+  }
+}
+
+const PLACE_INDEX_NAME = getEnv("PLACE_INDEX_NAME") ?? "";
+const AWS_REGION = getEnv("AWS_REGION") ?? "us-east-1";
 
 export type PlaceResult = {
   placeId: string;
@@ -49,7 +58,9 @@ export async function searchPlacesByText(
       MaxResults: options?.maxResults ?? 10,
       BiasPosition: options?.biasPosition,
     });
-    const response = await client.send(command);
+    const response = (await client.send(command)) as {
+      Results?: Array<{ Place?: { PlaceId?: string; Label?: string; Geometry?: { Point?: [number, number] } } }>;
+    };
     const results = response.Results ?? [];
     return results
       .filter((r) => r.Place?.Geometry?.Point !== undefined)
@@ -84,7 +95,9 @@ export async function searchPlaceByPosition(
       Position: [longitude, latitude],
       MaxResults: 1,
     });
-    const response = await client.send(command);
+    const response = (await client.send(command)) as {
+      Results?: Array<{ Place?: { Label?: string; Geometry?: { Point?: [number, number] } } }>;
+    };
     const place = response.Results?.[0]?.Place;
     if (!place?.Geometry?.Point) return null;
     return {
