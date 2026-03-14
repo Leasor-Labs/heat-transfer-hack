@@ -5,23 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HeatGrid - Waste Heat Redistribution Platform</title>
     
-    <!-- Mapbox GL (Amazon Location uses Mapbox GL) -->
+    <!-- External Libraries -->
     <script src="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js"></script>
     <link href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css" rel="stylesheet">
-    
-    <!-- Font Awesome for icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    
-    <!-- Chart.js for visualizations -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    
+
+    <!-- =========== CSS SECTION =========== -->
     <style>
+        /* CSS Reset */
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
 
+        /* Body & Main Container */
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
             background: linear-gradient(135deg, #f5f7fa 0%, #e9ecef 100%);
@@ -36,7 +35,7 @@
             padding: 20px;
         }
 
-        /* Header */
+        /* ===== Header Styles ===== */
         header {
             text-align: center;
             margin-bottom: 30px;
@@ -44,6 +43,7 @@
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             border-radius: 20px;
             color: white;
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
         }
 
         h1 {
@@ -59,21 +59,23 @@
             font-size: 0.2em;
             vertical-align: middle;
             margin-left: 10px;
+            backdrop-filter: blur(5px);
         }
 
         .subtitle {
             font-size: 1.3em;
             opacity: 0.95;
+            font-weight: 300;
         }
 
-        /* Cards */
+        /* ===== Card Styles ===== */
         .card {
             background: white;
             border-radius: 15px;
             padding: 25px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.1);
             margin-bottom: 25px;
-            transition: transform 0.3s ease;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
             border: 1px solid rgba(0,0,0,0.05);
         }
 
@@ -88,11 +90,22 @@
             font-size: 1.4em;
             border-bottom: 2px solid #e9ecef;
             padding-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
 
-        /* Search Section */
+        .card h3 i {
+            color: #667eea;
+        }
+
+        /* ===== Search Section ===== */
         .search-section {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .search-section h3 i {
             color: white;
         }
 
@@ -109,6 +122,7 @@
             border-radius: 10px;
             font-size: 1.1em;
             border: 2px solid transparent;
+            transition: border-color 0.3s;
         }
 
         .search-box input:focus {
@@ -126,6 +140,7 @@
             cursor: pointer;
             transition: all 0.3s;
             font-size: 1.1em;
+            min-width: 150px;
         }
 
         .search-box button:hover {
@@ -137,9 +152,12 @@
             opacity: 0.9;
             font-size: 0.9em;
             margin-top: 10px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
         }
 
-        /* Map Section */
+        /* ===== Map Section ===== */
         .map-header {
             display: flex;
             justify-content: space-between;
@@ -155,6 +173,7 @@
             background: #f8f9fa;
             padding: 10px 20px;
             border-radius: 30px;
+            font-size: 0.95em;
         }
 
         .dot {
@@ -165,8 +184,15 @@
             margin-right: 5px;
         }
 
-        .dot.red { background: #ff4d4d; box-shadow: 0 0 10px #ff4d4d; }
-        .dot.blue { background: #4d79ff; box-shadow: 0 0 10px #4d79ff; }
+        .dot.red { 
+            background: #ff4d4d; 
+            box-shadow: 0 0 10px rgba(255, 77, 77, 0.5);
+        }
+        
+        .dot.blue { 
+            background: #4d79ff; 
+            box-shadow: 0 0 10px rgba(77, 121, 255, 0.5);
+        }
 
         #map {
             width: 100%;
@@ -174,6 +200,11 @@
             border-radius: 10px;
             margin-bottom: 15px;
             border: 2px solid #e9ecef;
+            transition: border-color 0.3s;
+        }
+
+        #map:hover {
+            border-color: #667eea;
         }
 
         .map-controls {
@@ -184,7 +215,7 @@
             gap: 15px;
         }
 
-        /* Selection Panel */
+        /* ===== Selection Panel ===== */
         .selection-panel {
             display: flex;
             gap: 20px;
@@ -202,6 +233,9 @@
             margin-bottom: 8px;
             font-weight: 600;
             color: #495057;
+            display: flex;
+            align-items: center;
+            gap: 5px;
         }
 
         .select-group select {
@@ -212,6 +246,7 @@
             font-size: 1em;
             background: white;
             cursor: pointer;
+            transition: border-color 0.3s;
         }
 
         .select-group select:focus {
@@ -219,7 +254,11 @@
             outline: none;
         }
 
-        /* Buttons */
+        .select-group select option {
+            padding: 10px;
+        }
+
+        /* ===== Buttons ===== */
         .btn-primary {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
@@ -231,6 +270,10 @@
             transition: all 0.3s;
             font-size: 1em;
             min-width: 200px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
         }
 
         .btn-primary:hover:not(:disabled) {
@@ -253,14 +296,19 @@
             cursor: pointer;
             transition: all 0.3s;
             font-size: 1em;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
         }
 
         .btn-secondary:hover {
             background: #f8f9fa;
             border-color: #adb5bd;
+            transform: translateY(-2px);
         }
 
-        /* Results Grid */
+        /* ===== Results Grid ===== */
         .results-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -275,11 +323,13 @@
             text-align: center;
             border: 1px solid #dee2e6;
             transition: all 0.3s;
+            cursor: help;
         }
 
         .result-card:hover {
             transform: translateY(-3px);
             box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            border-color: #667eea;
         }
 
         .result-card h4 {
@@ -288,14 +338,25 @@
             font-size: 0.95em;
             text-transform: uppercase;
             letter-spacing: 0.5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
         }
 
         .result-value {
             font-size: 1.8em;
             font-weight: bold;
             color: #2c3e50;
+            margin: 5px 0;
         }
 
+        .result-card small {
+            color: #6c757d;
+            font-size: 0.85em;
+        }
+
+        /* ===== Chart Container ===== */
         .chart-container {
             height: 300px;
             margin: 30px 0;
@@ -303,16 +364,19 @@
             background: white;
             border-radius: 10px;
             border: 1px solid #e9ecef;
+            position: relative;
         }
 
+        /* ===== Action Buttons ===== */
         .action-buttons {
             display: flex;
             gap: 15px;
             justify-content: flex-end;
             margin-top: 20px;
+            flex-wrap: wrap;
         }
 
-        /* Rankings Table */
+        /* ===== Rankings Table ===== */
         .rankings-section {
             overflow-x: auto;
         }
@@ -323,6 +387,7 @@
             background: white;
             border-radius: 10px;
             overflow: hidden;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.05);
         }
 
         th {
@@ -331,6 +396,7 @@
             padding: 15px;
             font-weight: 600;
             text-align: center;
+            font-size: 0.95em;
         }
 
         td {
@@ -348,6 +414,10 @@
             background: #f0f4ff;
         }
 
+        tr:last-child td {
+            border-bottom: none;
+        }
+
         .loading {
             text-align: center;
             padding: 30px;
@@ -363,6 +433,7 @@
             font-weight: bold;
             display: inline-block;
             min-width: 40px;
+            box-shadow: 0 2px 5px rgba(102, 126, 234, 0.3);
         }
 
         .btn-small {
@@ -373,55 +444,140 @@
             border-radius: 5px;
             cursor: pointer;
             font-size: 0.9em;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
         }
 
         .btn-small:hover {
             background: #5a6268;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+
+        /* ===== Footer ===== */
+        .footer {
+            text-align: center;
+            padding: 30px 20px;
+            color: #6c757d;
+            border-top: 1px solid #dee2e6;
+            margin-top: 40px;
+        }
+
+        .footer p {
+            margin: 5px 0;
+        }
+
+        .footer i {
+            margin: 0 5px;
+            color: #667eea;
+        }
+
+        /* ===== Utility Classes ===== */
+        .fa-spinner {
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
 
         [title] {
             cursor: help;
         }
 
-        .fa, .fas, .far {
-            margin-right: 8px;
+        .text-success { color: #28a745; }
+        .text-warning { color: #ffc107; }
+        .text-danger { color: #dc3545; }
+        .text-info { color: #17a2b8; }
+
+        /* ===== Responsive Design ===== */
+        @media (max-width: 1024px) {
+            .container { padding: 15px; }
+            h1 { font-size: 3em; }
         }
 
-        #markerCounts {
-            color: #6c757d;
-            font-size: 0.95em;
-        }
-
-        /* Cost Breakdown Tooltip */
-        .cost-tooltip {
-            position: relative;
-        }
-
-        /* Responsive */
         @media (max-width: 768px) {
             h1 { font-size: 2.5em; }
+            h1 span { font-size: 0.15em; }
             .subtitle { font-size: 1.1em; }
-            .search-box { flex-direction: column; }
-            .selection-panel { flex-direction: column; }
-            .action-buttons { flex-direction: column; }
-            .map-header { flex-direction: column; align-items: start; }
+            
+            .search-box { 
+                flex-direction: column; 
+            }
+            
+            .search-box button {
+                width: 100%;
+            }
+            
+            .selection-panel { 
+                flex-direction: column; 
+                align-items: stretch;
+            }
+            
+            .select-group {
+                min-width: 100%;
+            }
+            
+            .btn-primary {
+                width: 100%;
+            }
+            
+            .action-buttons { 
+                flex-direction: column; 
+            }
+            
+            .action-buttons button {
+                width: 100%;
+            }
+            
+            .map-header { 
+                flex-direction: column; 
+                align-items: flex-start;
+            }
+            
+            .legend {
+                width: 100%;
+                justify-content: center;
+            }
+            
+            .results-grid {
+                grid-template-columns: 1fr;
+            }
         }
 
-        /* Animations */
-        @keyframes pulse {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.05); }
-            100% { transform: scale(1); }
+        @media (max-width: 480px) {
+            h1 { font-size: 2em; }
+            .card { padding: 15px; }
+            .result-value { font-size: 1.5em; }
+            table { font-size: 0.85em; }
+            th, td { padding: 8px; }
         }
 
-        .btn-primary:not(:disabled):active {
-            animation: pulse 0.3s;
+        /* ===== Print Styles ===== */
+        @media print {
+            .btn-primary, .btn-secondary, .search-section, .action-buttons {
+                display: none;
+            }
+            
+            .card {
+                break-inside: avoid;
+                box-shadow: none;
+                border: 1px solid #ddd;
+            }
+            
+            #map {
+                height: 400px;
+                page-break-inside: avoid;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <!-- Header -->
+        <!-- =========== HEADER SECTION =========== -->
         <header>
             <h1>🔥 HeatGrid <span>Beta</span></h1>
             <p class="subtitle">Turn Industrial Waste Heat into Community Savings</p>
@@ -431,7 +587,7 @@
             </p>
         </header>
 
-        <!-- Search Section -->
+        <!-- =========== SEARCH SECTION =========== -->
         <div class="card search-section">
             <h3><i class="fas fa-search"></i> Find Heat Sources & Demands</h3>
             <div class="search-box">
@@ -444,7 +600,7 @@
             </p>
         </div>
 
-        <!-- Map Section -->
+        <!-- =========== MAP SECTION =========== -->
         <div class="card">
             <div class="map-header">
                 <h3><i class="fas fa-map-marked-alt"></i> Heat Map</h3>
@@ -464,7 +620,7 @@
             </div>
         </div>
 
-        <!-- Selection & Calculation Section -->
+        <!-- =========== SELECTION SECTION =========== -->
         <div class="card">
             <h3><i class="fas fa-link"></i> Create Heat Connection</h3>
             <div class="selection-panel">
@@ -486,7 +642,7 @@
             </div>
         </div>
 
-        <!-- Results Section (Hidden by default) -->
+        <!-- =========== RESULTS SECTION =========== -->
         <div id="resultsSection" class="card" style="display: none;">
             <h3><i class="fas fa-chart-pie"></i> Opportunity Analysis</h3>
             
@@ -494,27 +650,32 @@
                 <div class="result-card" title="Straight-line distance using Haversine formula">
                     <h4><i class="fas fa-ruler"></i> Distance</h4>
                     <p id="resultDistance" class="result-value">-</p>
+                    <small>km</small>
                 </div>
                 <div class="result-card" title="Click for detailed breakdown" onclick="alert(document.getElementById('resultCapex').parentElement.title)" style="cursor: pointer;">
                     <h4><i class="fas fa-coins"></i> CAPEX</h4>
                     <p id="resultCapex" class="result-value">-</p>
-                    <small style="color: #6c757d;">Click for breakdown</small>
+                    <small>click for breakdown</small>
                 </div>
                 <div class="result-card">
                     <h4><i class="fas fa-clock"></i> Payback Period</h4>
                     <p id="resultPayback" class="result-value">-</p>
+                    <small>years</small>
                 </div>
                 <div class="result-card">
                     <h4><i class="fas fa-leaf"></i> CO₂ Saved/Year</h4>
                     <p id="resultCarbon" class="result-value">-</p>
+                    <small>tons</small>
                 </div>
                 <div class="result-card">
                     <h4><i class="fas fa-trophy"></i> Feasibility Score</h4>
                     <p id="resultScore" class="result-value">-</p>
+                    <small>/100</small>
                 </div>
                 <div class="result-card">
                     <h4><i class="fas fa-chart-line"></i> NPV (20 yr)</h4>
                     <p id="resultNpv" class="result-value">-</p>
+                    <small>million $</small>
                 </div>
             </div>
 
@@ -528,13 +689,13 @@
                 <button id="generatePdfBtn" class="btn-secondary">
                     <i class="fas fa-file-pdf"></i> Generate Report
                 </button>
-                <button id="shareBtn" class="btn-secondary" onclick="alert('Share functionality coming soon!')">
+                <button id="shareBtn" class="btn-secondary">
                     <i class="fas fa-share-alt"></i> Share
                 </button>
             </div>
         </div>
 
-        <!-- Rankings Section -->
+        <!-- =========== RANKINGS SECTION =========== -->
         <div class="card rankings-section">
             <h3><i class="fas fa-list-ol"></i> Top Ranked Opportunities</h3>
             <p class="hint" style="margin-bottom: 15px;">
@@ -561,8 +722,8 @@
             </table>
         </div>
 
-        <!-- Footer -->
-        <div style="text-align: center; padding: 20px; color: #6c757d;">
+        <!-- =========== FOOTER =========== -->
+        <div class="footer">
             <p>
                 <i class="fas fa-code-branch"></i> Built for Hackathon • 
                 <i class="fas fa-cloud"></i> AWS Native • 
@@ -574,6 +735,7 @@
         </div>
     </div>
 
+    <!-- =========== JAVASCRIPT SECTION =========== -->
     <script src="script.js"></script>
 </body>
 </html>
