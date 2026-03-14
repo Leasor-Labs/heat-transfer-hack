@@ -4,7 +4,8 @@ frontend:
     build:
       commands: []
   artifacts:
-    baseDirectory: /
+    # IMPORTANT: Change this to your actual folder structure
+    baseDirectory: frontend
     files:
       - '**/*'
   cache:
