@@ -76,6 +76,19 @@ app.get("/api/ranked-opportunities", async (_req, res) => {
   }
 });
 
+// AWS Location Service map style (Maps v2). Requires MAP_API_KEY and AWS_REGION.
+app.get("/api/map-style", (req, res) => {
+  const apiKey = process.env.MAP_API_KEY;
+  const region = process.env.AWS_REGION || "us-east-1";
+  if (!apiKey) {
+    res.status(404).json({ error: "Map not configured", styleUrl: null });
+    return;
+  }
+  const mapStyle = process.env.MAP_STYLE || "Standard";
+  const styleUrl = `https://maps.geo.${region}.amazonaws.com/v2/styles/${mapStyle}/descriptor?key=${apiKey}`;
+  res.json({ styleUrl });
+});
+
 // Serve static files from project root so GET / returns index.html
 app.use(express.static(__dirname + "/.."));
 

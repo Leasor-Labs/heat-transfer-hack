@@ -54,54 +54,54 @@ function showError(elementId, message) {
     }
 }
 
-// Initialize map with Amazon Location Service
+// Initialize map with AWS Location Service (MapLibre GL JS)
 async function initMap() {
     try {
-        // Try to get map style from backend first
-        let mapStyle = 'mapbox://styles/mapbox/light-v11'; // Fallback style
-        
+        // Prefer AWS Location Service map style from backend
+        const fallbackStyle = 'https://demotiles.maplibre.org/styles/osm-bright/style.json';
+        let mapStyle = fallbackStyle;
+
         try {
             const styleResponse = await fetch(`${API_BASE_URL}/api/map-style`);
             if (styleResponse.ok) {
                 const styleData = await styleResponse.json();
-                mapStyle = styleData.styleUrl || mapStyle;
-                console.log('Using Amazon Location Service map style');
+                if (styleData.styleUrl) {
+                    mapStyle = styleData.styleUrl;
+                    console.log('Using AWS Location Service map');
+                }
             }
         } catch (e) {
-            console.log('Amazon Location Service not configured, using fallback map');
+            console.log('AWS Location Service map not configured, using fallback');
         }
-        
-        // Initialize map with Mapbox (Amazon Location uses Mapbox GL)
-        mapboxgl.accessToken = 'pk.eyJ1IjoiZHVtbXkiLCJhIjoiY2xvZHVtbXkifQ.dummy'; // Public fallback token
-        
-        map = new mapboxgl.Map({
+
+        map = new maplibregl.Map({
             container: 'map',
             style: mapStyle,
             center: [-82.5, 40.0], // Ohio center
             zoom: 7
         });
-        
-        map.addControl(new mapboxgl.NavigationControl(), 'top-left');
-        
+
+        map.addControl(new maplibregl.NavigationControl(), 'top-left');
+
         map.on('load', () => {
             console.log('Map loaded successfully');
             mapInitialized = true;
-            
-            // Add a welcome popup
-            new mapboxgl.Popup({ closeOnClick: true })
+
+            const usingAws = typeof mapStyle === 'string' && mapStyle.includes('amazonaws.com');
+            new maplibregl.Popup({ closeOnClick: true })
                 .setLngLat([-82.5, 40.0])
                 .setHTML(`
                     <div style="padding: 10px;">
                         <h3 style="margin: 0 0 10px 0;">🔥 HeatGrid</h3>
                         <p>Welcome! Select a source and consumer to calculate heat recovery opportunities.</p>
                         <p style="font-size: 0.9em; color: #666;">
-                            ${mapStyle.includes('amazon') ? '✓ Using AWS Location Service' : '⚠️ Using fallback map'}
+                            ${usingAws ? '✓ Using AWS Location Service' : '⚠️ Using fallback map'}
                         </p>
                     </div>
                 `)
                 .addTo(map);
         });
-        
+
         map.on('error', (e) => {
             console.error('Map error:', e);
         });
@@ -223,9 +223,9 @@ function updateMarkers() {
             </div>
         `;
         
-        const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(popupContent);
+        const popup = new maplibregl.Popup({ offset: 25 }).setHTML(popupContent);
         
-        const marker = new mapboxgl.Marker({ color: '#ff4d4d' })
+        const marker = new maplibregl.Marker({ color: '#ff4d4d' })
             .setLngLat([source.longitude, source.latitude])
             .setPopup(popup)
             .addTo(map);
@@ -253,9 +253,9 @@ function updateMarkers() {
             </div>
         `;
         
-        const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(popupContent);
+        const popup = new maplibregl.Popup({ offset: 25 }).setHTML(popupContent);
         
-        const marker = new mapboxgl.Marker({ color: '#4d79ff' })
+        const marker = new maplibregl.Marker({ color: '#4d79ff' })
             .setLngLat([consumer.longitude, consumer.latitude])
             .setPopup(popup)
             .addTo(map);
@@ -431,7 +431,7 @@ function fitMarkersToBounds() {
         return;
     }
     
-    const bounds = new mapboxgl.LngLatBounds();
+    const bounds = new maplibregl.LngLatBounds();
     
     sourceMarkers.forEach(({ marker }) => {
         bounds.extend(marker.getLngLat());
@@ -695,7 +695,7 @@ function drawRoute(opp) {
         });
         
         // Fit bounds to show the route
-        const bounds = new mapboxgl.LngLatBounds()
+        const bounds = new maplibregl.LngLatBounds()
             .extend([source.longitude, source.latitude])
             .extend([consumer.longitude, consumer.latitude]);
         
