@@ -5,7 +5,7 @@
  * - AWS_REGION: AWS region (default us-east-1)
  */
 
-const PLACE_INDEX_NAME = process.env.PLACE_INDEX_NAME ?? "";
+const PLACE_INDEX_NAME = process.env.PLACE_INDEX_NAME ?? "HeatAppIndex";
 const AWS_REGION = process.env.AWS_REGION ?? "us-east-1";
 
 export type PlaceResult = {
