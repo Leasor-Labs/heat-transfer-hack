@@ -56,8 +56,24 @@ function showError(elementId, message) {
 
 // Initialize map with AWS Location Service (MapLibre GL JS)
 async function initMap() {
+    const mapEl = document.getElementById('map');
+    if (!mapEl) return;
+
+    if (typeof maplibregl === 'undefined') {
+        mapEl.innerHTML = `
+            <div style="display: flex; justify-content: center; align-items: center; height: 100%; min-height: 400px; background: #f8f9fa; border-radius: 10px;">
+                <div style="text-align: center; color: #6c757d; padding: 20px;">
+                    <i class="fas fa-map-marked-alt fa-3x" style="margin-bottom: 15px;"></i>
+                    <h3>Map library failed to load</h3>
+                    <p>Check your connection and reload. Or open this app from <strong>http://localhost:3000</strong> after running <code>npm run dev</code>.</p>
+                    <button onclick="location.reload()" class="btn-secondary" style="margin-top: 15px;"><i class="fas fa-redo"></i> Retry</button>
+                </div>
+            </div>
+        `;
+        return;
+    }
+
     try {
-        // Prefer AWS Location Service map style from backend
         const fallbackStyle = 'https://demotiles.maplibre.org/styles/osm-bright/style.json';
         let mapStyle = fallbackStyle;
 
@@ -77,16 +93,15 @@ async function initMap() {
         map = new maplibregl.Map({
             container: 'map',
             style: mapStyle,
-            center: [-82.5, 40.0], // Ohio center
+            center: [-82.5, 40.0],
             zoom: 7
         });
 
         map.addControl(new maplibregl.NavigationControl(), 'top-left');
 
         map.on('load', () => {
-            console.log('Map loaded successfully');
             mapInitialized = true;
-
+            map.resize();
             const usingAws = typeof mapStyle === 'string' && mapStyle.includes('amazonaws.com');
             new maplibregl.Popup({ closeOnClick: true })
                 .setLngLat([-82.5, 40.0])
@@ -95,7 +110,7 @@ async function initMap() {
                         <h3 style="margin: 0 0 10px 0;">🔥 HeatGrid</h3>
                         <p>Welcome! Select a source and consumer to calculate heat recovery opportunities.</p>
                         <p style="font-size: 0.9em; color: #666;">
-                            ${usingAws ? '✓ Using AWS Location Service' : '⚠️ Using fallback map'}
+                            ${usingAws ? '✓ Using AWS Location Service' : '✓ Map ready'}
                         </p>
                     </div>
                 `)
@@ -105,18 +120,15 @@ async function initMap() {
         map.on('error', (e) => {
             console.error('Map error:', e);
         });
-        
     } catch (error) {
         console.error('Failed to initialize map:', error);
-        document.getElementById('map').innerHTML = `
-            <div style="display: flex; justify-content: center; align-items: center; height: 500px; background: #f8f9fa; border-radius: 10px;">
-                <div style="text-align: center; color: #6c757d;">
+        mapEl.innerHTML = `
+            <div style="display: flex; justify-content: center; align-items: center; height: 100%; min-height: 400px; background: #f8f9fa; border-radius: 10px;">
+                <div style="text-align: center; color: #6c757d; padding: 20px;">
                     <i class="fas fa-map-marked-alt fa-3x" style="margin-bottom: 15px;"></i>
-                    <h3>Map Loading Failed</h3>
-                    <p>Using data view instead</p>
-                    <button onclick="location.reload()" class="btn-secondary" style="margin-top: 15px;">
-                        <i class="fas fa-redo"></i> Retry
-                    </button>
+                    <h3>Map failed to load</h3>
+                    <p>For the best experience, run <code>npm run dev</code> and open <strong>http://localhost:3000</strong>.</p>
+                    <button onclick="location.reload()" class="btn-secondary" style="margin-top: 15px;"><i class="fas fa-redo"></i> Retry</button>
                 </div>
             </div>
         `;

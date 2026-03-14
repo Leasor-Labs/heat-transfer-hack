@@ -7,7 +7,6 @@
     
     <!-- MapLibre GL JS (used with AWS Location Service Maps) -->
     <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet">
-    <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
     
     <!-- Font Awesome for icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
@@ -52,7 +51,7 @@
                     <span><span class="dot blue"></span> Heat Consumers (Buildings)</span>
                 </div>
             </div>
-            <div id="map"></div>
+            <div id="map" style="height: 500px; width: 100%; min-height: 400px; background: #e9ecef; border-radius: 10px;"></div>
             <div class="map-controls">
                 <button id="fitMarkersBtn" class="btn-secondary">
                     <i class="fas fa-expand-arrows-alt"></i> Fit All Markers
@@ -173,6 +172,7 @@
         </div>
     </div>
     
+    <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
     <script src="script.js"></script>
 </body>
 </html>
