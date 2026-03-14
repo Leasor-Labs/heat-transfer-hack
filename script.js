@@ -32,25 +32,24 @@ let currentOpportunity = null;
 let allRankings = [];
 let mapInitialized = false;
 
+// Show empty state when no search has been run (map and rankings driven by search only)
+function showEmptyRankingsMessage() {
+    const tbody = document.getElementById('rankingsBody');
+    if (tbody) {
+        tbody.innerHTML = '<tr><td colspan="7" class="loading"><i class="fas fa-search"></i> Search for a location above to see ranked opportunities</td></tr>';
+    }
+}
+
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', async () => {
     console.log('HeatGrid initializing...');
     
-    // Show loading states
-    showLoading('rankingsBody', 'Loading heat sources...');
-    document.getElementById('markerCounts').innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading...';
-    
-    // Initialize map with fallback
     await initMap();
     
-    // Load initial data (Ohio seed data)
-    await loadData();
+    document.getElementById('markerCounts').innerHTML = '<i class="fas fa-map-marker-alt"></i> Search above to see heat sources and consumers';
+    showEmptyRankingsMessage();
     
-    // Setup event listeners
     setupEventListeners();
-    
-    // Load rankings
-    await loadRankings();
 });
 
 // Show loading state helper
@@ -355,14 +354,23 @@ function updateMarkerCounts() {
 
 // Setup event listeners
 function setupEventListeners() {
-    // Search button
+    // Search button: blank = clear map; non-empty = load data and rankings
     const searchBtn = document.getElementById('searchBtn');
     if (searchBtn) {
         searchBtn.addEventListener('click', async () => {
-            const query = document.getElementById('locationSearch').value;
-            if (query) {
-                await loadData(query);
+            const query = (document.getElementById('locationSearch').value || '').trim();
+            if (!query) {
+                sources = [];
+                consumers = [];
+                if (mapInitialized) updateMarkers();
+                updateSelectors();
+                updateMarkerCounts();
+                showEmptyRankingsMessage();
+                document.getElementById('markerCounts').innerHTML = '<i class="fas fa-map-marker-alt"></i> Search above to see heat sources and consumers';
+                return;
             }
+            await loadData(query);
+            await loadRankings();
         });
     }
     
