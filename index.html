@@ -3,17 +3,178 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<link rel="stylesheet" href="Backend/CSS-files/style.css">
-    <title>HeatGrid</title>
+    <title>HeatGrid - Waste Heat Redistribution Platform</title>
+    
+    <!-- MapLibre GL JS (used with AWS Location Service Maps) -->
+    <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet">
+    
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    
+    <!-- Chart.js for visualizations -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <link rel="stylesheet" href="styles.css">
+
 </head>
 <body>
-    <h1>🔥 HeatGrid is Live! \b BANG!</h1>
-    <p>If you can see this, the deployment worked.</p>
-	  <img 
-        src="https://pbs.twimg.com/media/G8kKDc2W4AE2ipK?format=png&name=900x900" 
-        alt="Industrial factory with steam - waste heat source"
-        width="600"
-        style="max-width: 100%; border-radius: 10px; margin-top: 20px;"
-    >
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <h1>🔥 HeatGrid <span>Beta</span></h1>
+            <p class="subtitle">Turn Industrial Waste Heat into Community Savings</p>
+            <p style="margin-top: 15px; opacity: 0.9;">
+                <i class="fas fa-check-circle"></i> Powered by AWS Location Services 
+                <i class="fas fa-circle" style="margin-left: 15px; color: #ffd700;"></i> Ohio Seed Data
+            </p>
+        </header>
+
+        <!-- Search Section -->
+        <div class="card search-section">
+            <h3><i class="fas fa-search"></i> Find Heat Sources & Demands</h3>
+            <div class="search-box">
+                <input type="text" id="locationSearch" placeholder="Enter city or region (e.g., Cleveland, OH)" value="Ohio">
+                <button id="searchBtn"><i class="fas fa-map-marker-alt"></i> Search</button>
+            </div>
+            <p class="hint">
+                <i class="fas fa-info-circle"></i> 
+                Using Amazon Location Service for geocoding • Seed data shows Ohio facilities
+            </p>
+        </div>
+
+        <!-- Map Section -->
+        <div class="card">
+            <div class="map-header">
+                <h3><i class="fas fa-map-marked-alt"></i> Heat Map</h3>
+                <div class="legend">
+                    <span><span class="dot red"></span> Heat Sources (Industrial)</span>
+                    <span><span class="dot blue"></span> Heat Consumers (Buildings)</span>
+                </div>
+            </div>
+            <div id="map" style="height: 500px; width: 100%; min-height: 400px; background: #e9ecef; border-radius: 10px;"></div>
+            <div class="map-controls">
+                <button id="fitMarkersBtn" class="btn-secondary">
+                    <i class="fas fa-expand-arrows-alt"></i> Fit All Markers
+                </button>
+                <span id="markerCounts">
+                    <i class="fas fa-map-marker-alt"></i> Loading markers...
+                </span>
+            </div>
+        </div>
+
+        <!-- Selection & Calculation Section -->
+        <div class="card">
+            <h3><i class="fas fa-link"></i> Create Heat Connection</h3>
+            <div class="selection-panel">
+                <div class="select-group">
+                    <label><i class="fas fa-industry"></i> Heat Source:</label>
+                    <select id="sourceSelect">
+                        <option value="">Select a source...</option>
+                    </select>
+                </div>
+                <div class="select-group">
+                    <label><i class="fas fa-building"></i> Heat Consumer:</label>
+                    <select id="consumerSelect">
+                        <option value="">Select a consumer...</option>
+                    </select>
+                </div>
+                <button id="calculateBtn" class="btn-primary" disabled>
+                    <i class="fas fa-calculator"></i> Calculate Opportunity
+                </button>
+            </div>
+        </div>
+
+        <!-- Results Section (Hidden by default) -->
+        <div id="resultsSection" class="card" style="display: none;">
+            <h3><i class="fas fa-chart-pie"></i> Opportunity Analysis</h3>
+            
+            <div class="results-grid">
+                <div class="result-card" title="Straight-line distance using Haversine formula">
+                    <h4><i class="fas fa-ruler"></i> Distance</h4>
+                    <p id="resultDistance" class="result-value">-</p>
+                </div>
+                <div class="result-card" title="Click for detailed breakdown" onclick="alert(document.getElementById('resultCapex').parentElement.title)" style="cursor: pointer;">
+                    <h4><i class="fas fa-coins"></i> CAPEX</h4>
+                    <p id="resultCapex" class="result-value">-</p>
+                    <small style="color: #6c757d;">Click for breakdown</small>
+                </div>
+                <div class="result-card">
+                    <h4><i class="fas fa-clock"></i> Payback Period</h4>
+                    <p id="resultPayback" class="result-value">-</p>
+                </div>
+                <div class="result-card">
+                    <h4><i class="fas fa-leaf"></i> CO₂ Saved/Year</h4>
+                    <p id="resultCarbon" class="result-value">-</p>
+                </div>
+                <div class="result-card">
+                    <h4><i class="fas fa-trophy"></i> Feasibility Score</h4>
+                    <p id="resultScore" class="result-value">-</p>
+                </div>
+                <div class="result-card">
+                    <h4><i class="fas fa-chart-line"></i> NPV (20 yr)</h4>
+                    <p id="resultNpv" class="result-value">-</p>
+                </div>
+            </div>
+
+            <!-- Financial Chart -->
+            <div class="chart-container">
+                <canvas id="financialChart"></canvas>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="action-buttons">
+                <button id="generatePdfBtn" class="btn-secondary">
+                    <i class="fas fa-file-pdf"></i> Generate Report
+                </button>
+                <button id="shareBtn" class="btn-secondary" onclick="alert('Share functionality coming soon!')">
+                    <i class="fas fa-share-alt"></i> Share
+                </button>
+            </div>
+        </div>
+
+        <!-- Rankings Section -->
+        <div class="card rankings-section">
+            <h3><i class="fas fa-list-ol"></i> Top Ranked Opportunities</h3>
+            <p class="hint" style="margin-bottom: 15px;">
+                <i class="fas fa-info-circle"></i> 
+                Ranked by feasibility score (higher = better)
+            </p>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Rank</th>
+                        <th>Heat Source</th>
+                        <th>Heat Consumer</th>
+                        <th>Distance</th>
+                        <th>Payback</th>
+                        <th>Score</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="rankingsBody">
+                    <tr><td colspan="7" class="loading">
+                        <i class="fas fa-spinner fa-spin"></i> Loading rankings...
+                    </td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Footer -->
+        <div style="text-align: center; padding: 20px; color: #6c757d;">
+            <p>
+                <i class="fas fa-code-branch"></i> Built for Hackathon • 
+                <i class="fas fa-cloud"></i> AWS Native • 
+                <i class="fas fa-map"></i> Amazon Location Services
+            </p>
+            <p style="font-size: 0.9em; margin-top: 10px;">
+                © 2024 HeatGrid • Waste Heat Recovery Platform
+            </p>
+        </div>
+    </div>
+    
+    <!-- Set API base URL for Amplify: point to your API Gateway URL (e.g. Lambda backend). Leave empty to use Ohio seed fallback. -->
+    <script>window.HEATGRID_API_BASE_URL = "";</script>
+    <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
+    <script src="script.js"></script>
 </body>
 </html>
