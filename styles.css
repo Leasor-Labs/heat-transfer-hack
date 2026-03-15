@@ -86,9 +86,9 @@ h1 {
 
 /* Search Section */
 .search-section {
-    background: linear-gradient(90deg, rgba(249,115,22,0.06), rgba(255,255,255,0.02));
+    background: #374151;
     color: var(--text);
-    border: 1px solid rgba(249,115,22,0.08);
+    border: 1px solid rgba(255,255,255,0.08);
 }
 
 .search-box {
@@ -137,6 +137,22 @@ h1 {
     color: var(--muted);
 }
 
+/* Search + Map same width */
+.search-and-map-wrap {
+    width: 100%;
+}
+
+.search-and-map-wrap .card {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.map-card #map {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
 /* Map Section */
 .map-header {
     display: flex;
@@ -168,7 +184,6 @@ h1 {
 .dot.blue { background: #ffb86b; box-shadow: 0 0 10px rgba(255,184,107,0.12); }
 
 #map {
-    width: 100%;
     height: 520px;
     border-radius: 12px;
     margin-bottom: 15px;

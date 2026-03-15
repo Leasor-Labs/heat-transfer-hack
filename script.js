@@ -136,19 +136,6 @@ async function initMap() {
         map.on('load', () => {
             mapInitialized = true;
             map.resize();
-            const usingAws = typeof style === 'string' && style.includes('amazonaws.com');
-            new maplibregl.Popup({ closeOnClick: true })
-                .setLngLat([-82.5, 40.0])
-                .setHTML(`
-                    <div style="padding: 10px;">
-                        <h3 style="margin: 0 0 10px 0;">🔥 HeatGrid</h3>
-                        <p>Welcome! Select a source and consumer to calculate heat recovery opportunities.</p>
-                        <p style="font-size: 0.9em; color: #666;">
-                            ${usingAws ? '✓ Using AWS Location Service' : '✓ Map ready'}
-                        </p>
-                    </div>
-                `)
-                .addTo(map);
         });
 
         map.on('error', (e) => {
