@@ -15,30 +15,42 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
     <link rel="stylesheet" href="styles.css">
+    <!-- App favicon (replace with your logo files at assets/) -->
+    <link rel="icon" type="image/png" sizes="32x32" href="assets/heatgrid-favicon-32.png">
+    <link rel="icon" type="image/png" sizes="64x64" href="assets/heatgrid-favicon-64.png">
+    <link rel="icon" type="image/png" sizes="128x128" href="assets/heatgrid-favicon-128.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="assets/heatgrid-favicon-180.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="assets/heatgrid-favicon-192.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="assets/heatgrid-favicon-512.png">
+    <link id="app-favicon" rel="icon" type="image/png" sizes="32x32" href="assets/heatgrid-favicon-32.png">
+    <link rel="shortcut icon" href="assets/heatgrid-favicon-32.png">
+    <link rel="manifest" href="/assets/site.webmanifest">
+    <meta name="theme-color" content="#06b6d4">
+    <link rel="mask-icon" href="/assets/heatgrid-favicon-180.png" color="#06b6d4">
 
 </head>
 <body>
     <div class="container">
         <!-- Header -->
         <header>
-            <h1>🔥 HeatGrid <span>Beta</span></h1>
-            <p class="subtitle">Turn Industrial Waste Heat into Community Savings</p>
-            <p style="margin-top: 15px; opacity: 0.9;">
-                <i class="fas fa-check-circle"></i> Powered by AWS Location Services 
-                <i class="fas fa-circle" style="margin-left: 15px; color: #ffd700;"></i> Ohio Seed Data
-            </p>
+            <div class="header-inner">
+                <img id="app-logo" src="assets/heatgrid-logo.png" alt="HeatGrid logo">
+                <div class="title-block">
+                    <h1>HeatGrid</h1>
+                    <p class="subtitle">Turn industrial waste heat into community savings</p>
+                </div>
+            </div>
         </header>
 
         <!-- Search Section -->
         <div class="card search-section">
             <h3><i class="fas fa-search"></i> Find Heat Sources & Demands</h3>
             <div class="search-box">
-                <input type="text" id="locationSearch" placeholder="Enter city or region (e.g., Cleveland, OH)" value="Ohio">
+                <input type="text" id="locationSearch" placeholder="Enter city or region (e.g., Cleveland, OH)">
                 <button id="searchBtn"><i class="fas fa-map-marker-alt"></i> Search</button>
             </div>
             <p class="hint">
-                <i class="fas fa-info-circle"></i> 
-                Using Amazon Location Service for geocoding • Seed data shows Ohio facilities
+                <i class="fas fa-info-circle"></i> Enter a city or region to search (seed data available locally).
             </p>
         </div>
 
@@ -161,13 +173,8 @@
 
         <!-- Footer -->
         <div style="text-align: center; padding: 20px; color: #6c757d;">
-            <p>
-                <i class="fas fa-code-branch"></i> Built for Hackathon • 
-                <i class="fas fa-cloud"></i> AWS Native • 
-                <i class="fas fa-map"></i> Amazon Location Services
-            </p>
             <p style="font-size: 0.9em; margin-top: 10px;">
-                © 2024 HeatGrid • Waste Heat Recovery Platform
+                © <span id="footerYear"></span> HeatGrid • Waste Heat Recovery Platform
             </p>
         </div>
     </div>
@@ -176,5 +183,20 @@
     <script>window.HEATGRID_API_BASE_URL = "";</script>
     <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
     <script src="script.js"></script>
+    <script>
+        // Dynamic footer year and cache-busted favicon hookup
+        (function(){
+            const y = new Date().getFullYear();
+            const el = document.getElementById('footerYear');
+            if (el) el.textContent = y;
+            const favicon = document.getElementById('app-favicon');
+            if (favicon) {
+                const url = 'assets/heatgrid-favicon-32.png?v=' + Date.now();
+                favicon.href = url;
+                const alt = document.querySelector('link[rel="shortcut icon"]');
+                if (alt) alt.href = url;
+            }
+        })();
+    </script>
 </body>
 </html>
