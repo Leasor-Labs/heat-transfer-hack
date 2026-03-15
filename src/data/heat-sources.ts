@@ -98,6 +98,22 @@ function filterFallbackSourcesByKeyword(
   );
 }
 
+async function getHeatSourcesFromDynamoOrFallback(
+  query: string | undefined
+): Promise<HeatSource[]> {
+  if (HEAT_SOURCES_TABLE) {
+    try {
+      const fromDynamo = await fetchHeatSourcesFromDynamo();
+      if (fromDynamo.length > 0) {
+        return fromDynamo;
+      }
+    } catch {
+      // ignore and fall through to in-memory fallback
+    }
+  }
+  return query ? filterFallbackSourcesByKeyword(query) : FALLBACK_HEAT_SOURCES;
+}
+
 /**
  * Returns heat sources for the backend API.
  * When search query is present and AWS Location is configured: searches places by keyword;
@@ -137,7 +153,8 @@ export async function getHeatSources(options?: {
       }
       return { heatSources: [] };
     } catch {
-      return { heatSources: [], errorCode: 25 };
+      const heatSources = await getHeatSourcesFromDynamoOrFallback(query);
+      return { heatSources, errorCode: 25 };
     }
   }
 
@@ -146,11 +163,8 @@ export async function getHeatSources(options?: {
     return { heatSources };
   }
 
-  if (HEAT_SOURCES_TABLE) {
-    const heatSources = await fetchHeatSourcesFromDynamo();
-    return { heatSources };
-  }
-  return { heatSources: [] };
+  const heatSources = await getHeatSourcesFromDynamoOrFallback(undefined);
+  return { heatSources };
 }
 
 /**

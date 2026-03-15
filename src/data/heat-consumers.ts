@@ -83,6 +83,22 @@ function filterFallbackConsumersByKeyword(
   );
 }
 
+async function getHeatConsumersFromDynamoOrFallback(
+  query: string | undefined
+): Promise<HeatConsumer[]> {
+  if (HEAT_CONSUMERS_TABLE) {
+    try {
+      const fromDynamo = await fetchHeatConsumersFromDynamo();
+      if (fromDynamo.length > 0) {
+        return fromDynamo;
+      }
+    } catch {
+      // ignore and fall through to in-memory fallback
+    }
+  }
+  return query ? filterFallbackConsumersByKeyword(query) : FALLBACK_HEAT_CONSUMERS;
+}
+
 /**
  * Returns heat consumers for the backend API.
  * When search query is present and AWS Location is configured: searches places by keyword;
@@ -122,7 +138,8 @@ export async function getHeatConsumers(options?: {
       }
       return { heatConsumers: [] };
     } catch {
-      return { heatConsumers: [], errorCode: 25 };
+      const heatConsumers = await getHeatConsumersFromDynamoOrFallback(query);
+      return { heatConsumers, errorCode: 25 };
     }
   }
 
@@ -131,11 +148,8 @@ export async function getHeatConsumers(options?: {
     return { heatConsumers };
   }
 
-  if (HEAT_CONSUMERS_TABLE) {
-    const heatConsumers = await fetchHeatConsumersFromDynamo();
-    return { heatConsumers };
-  }
-  return { heatConsumers: [] };
+  const heatConsumers = await getHeatConsumersFromDynamoOrFallback(undefined);
+  return { heatConsumers };
 }
 
 /**
