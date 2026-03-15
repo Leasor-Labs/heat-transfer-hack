@@ -15,10 +15,16 @@ const BASE_HEAT_DEMAND_MWH = 3000;
 export async function buildHeatSourcesFromLocationService(
   queries: string[]
 ): Promise<HeatSource[]> {
-  const tagged = await searchPlacesByKeywords(queries, {
+  let tagged = await searchPlacesByKeywords(queries, {
     maxResultsPerKeyword: 5,
     filterBBox: TOLEDO_OHIO_BBOX,
   });
+  // If nothing found within the Toledo bbox, retry without a bbox to widen the search area.
+  if (tagged.length === 0) {
+    tagged = await searchPlacesByKeywords(queries, {
+      maxResultsPerKeyword: 5,
+    });
+  }
   return tagged.map(({ place: p, keyword }) => ({
     id: `location-source-${p.placeId}`,
     name: p.label || `Source ${p.placeId}`,
@@ -43,10 +49,16 @@ export async function buildHeatSourcesFromLocationService(
 export async function buildHeatConsumersFromLocationService(
   queries: string[]
 ): Promise<HeatConsumer[]> {
-  const tagged = await searchPlacesByKeywords(queries, {
+  let tagged = await searchPlacesByKeywords(queries, {
     maxResultsPerKeyword: 5,
     filterBBox: TOLEDO_OHIO_BBOX,
   });
+  // If nothing found within the Toledo bbox, retry without a bbox to widen the search area.
+  if (tagged.length === 0) {
+    tagged = await searchPlacesByKeywords(queries, {
+      maxResultsPerKeyword: 5,
+    });
+  }
   return tagged.map(({ place: p, keyword }) => ({
     id: `location-consumer-${p.placeId}`,
     name: p.label || `Consumer ${p.placeId}`,
