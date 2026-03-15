@@ -13,7 +13,9 @@ Add these in **Amplify Console** → your app → **App settings** → **Environ
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| **SAM_STAGE** | API Gateway stage name (template parameter). | `dev` |
+| **SAM_STAGE** | API Gateway stage name (template parameter). If unset, the build uses `dev`. | `dev` |
+
+**Note:** The build uses `--resolve-s3` so SAM creates/manages the S3 bucket for Lambda artifacts; you do not need to create a bucket or set `SAM_ARTIFACTS_BUCKET`.
 
 ## Required for frontend (API base URL)
 

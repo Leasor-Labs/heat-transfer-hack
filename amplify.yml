@@ -12,7 +12,7 @@ frontend:
         - node scripts/inject-api-url.js
     postBuild:
       commands:
-        - sam deploy --no-confirm-changeset --no-fail-on-empty-changeset --stack-name $SAM_STACK_NAME --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM --region $AWS_REGION --parameter-overrides Stage=$SAM_STAGE
+        - sam deploy --no-confirm-changeset --no-fail-on-empty-changeset --resolve-s3 --stack-name $SAM_STACK_NAME --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM --region $AWS_REGION --parameter-overrides "Stage=${SAM_STAGE:-dev}"
   artifacts:
     baseDirectory: .
     files:
