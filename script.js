@@ -555,7 +555,7 @@ function fitMarkersToBounds() {
         bounds.extend([c.lng + pad, c.lat + pad]);
     }
     
-    map.fitBounds(bounds, { padding: 50, duration: 1000, maxZoom: 14 });
+    map.fitBounds(bounds, { padding: 50, duration: 3500, maxZoom: 14 });
 }
 
 // Calculate opportunity for selected source and consumer
@@ -813,7 +813,7 @@ function drawRoute(opp) {
             .extend([source.longitude, source.latitude])
             .extend([consumer.longitude, consumer.latitude]);
         
-        map.fitBounds(bounds, { padding: 100, duration: 1000 });
+        map.fitBounds(bounds, { padding: 100, duration: 3500 });
         
     } catch (error) {
         console.error('Error drawing route:', error);
