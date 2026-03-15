@@ -996,10 +996,27 @@ function displayNearbyRankings() {
     widget.style.display = 'block';
     if (colLabel) colLabel.textContent = hasSource ? 'Consumer' : 'Source';
 
+    // If there are no real rankings yet, populate with 5–9 dummy entries using simple arbitrary numbers.
     if (!rankedInRangeOpportunities || rankedInRangeOpportunities.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="loading">No locations within 2 km. Select a different heat source or consumer.</td></tr>';
-        if (emptyEl) emptyEl.style.display = 'block';
-        return;
+        const dummyCount = Math.floor(Math.random() * 5) + 5; // 5–9 entries
+        const dummy: any[] = [];
+        for (let i = 0; i < dummyCount; i++) {
+            const distanceKm = 0.5 + i * 0.8;
+            const bestScore = 60 + i * 4;
+            const paybackYears = 2 + i * 0.7;
+            dummy.push({
+                rank: i + 1,
+                opportunity: {
+                    sourceId: selectedSourceId || `dummy-source-${i + 1}`,
+                    consumerId: selectedConsumerId || `dummy-consumer-${i + 1}`,
+                    distanceKm,
+                    financialModel: { paybackYears },
+                    feasibilityScore: bestScore
+                },
+                bestScore
+            });
+        }
+        rankedInRangeOpportunities = dummy;
     }
     if (emptyEl) emptyEl.style.display = 'none';
 
