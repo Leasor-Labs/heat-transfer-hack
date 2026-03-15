@@ -147,6 +147,10 @@ h1 {
 }
 
 .autocomplete-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
     padding: 12px 14px;
     cursor: pointer;
     font-size: 0.95rem;
@@ -154,6 +158,26 @@ h1 {
     border-bottom: 1px solid #eee;
     transition: background 0.1s;
 }
+
+.autocomplete-item-value {
+    flex: 1;
+    min-width: 0;
+}
+
+.autocomplete-item-type {
+    flex-shrink: 0;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    color: #6b7280;
+    background: #e5e7eb;
+    padding: 2px 8px;
+    border-radius: 6px;
+}
+
+.autocomplete-item[data-type="name"] .autocomplete-item-type { background: #d1fae5; color: #065f46; }
+.autocomplete-item[data-type="location"] .autocomplete-item-type { background: #e5e7eb; color: #374151; }
 
 .autocomplete-item:last-child {
     border-bottom: none;
@@ -454,6 +478,41 @@ tr:hover {
 /* Cost Breakdown Tooltip */
 .cost-tooltip {
     position: relative;
+}
+
+
+/* 1. Always white background and black text for heat source/consumer selects */
+#sourceSelect, #consumerSelect {
+    background: #fff !important;
+    color: #111 !important;
+    border: 1px solid #ccc;
+}
+#sourceSelect option, #consumerSelect option {
+    background: #fff !important;
+    color: #111 !important;
+}
+
+/* 2. Rankings Table: Make gray/grayish text dark black */
+.rankings-section table tbody td,
+.rankings-section table tbody td.loading,
+.rankings-section .hint {
+    color: #111 !important;
+}
+
+/* 3. Rankings Table: Orange header row with white text */
+.rankings-section table thead tr {
+    background: #ff8800 !important;
+}
+.rankings-section table thead th {
+    color: #fff !important;
+    background: transparent !important;
+}
+
+/* 4. Dropdowns in rankings section: dark black text */
+.rankings-section select,
+.rankings-section select option {
+    color: #111 !important;
+    background: #fff !important;
 }
 
 /* Responsive */

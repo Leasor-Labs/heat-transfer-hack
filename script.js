@@ -32,36 +32,54 @@ let currentOpportunity = null;
 let allRankings = [];
 let mapInitialized = false;
 
-// Location suggestions for autocomplete (Ohio cities/regions + from loaded data)
+// All tags from database (industries + categories) for search autocomplete
+let allTags = { industries: [], categories: [] };
+
+// Location suggestions for autocomplete: city, region, or address (e.g. Toledo, OH)
 const LOCATION_SUGGESTIONS_STATIC = [
-    'Cleveland, OH', 'Columbus, OH', 'Cincinnati, OH', 'Toledo, OH', 'Akron, OH',
-    'Ohio', 'Cleveland', 'Columbus', 'Cincinnati', 'Toledo', 'Akron',
+    'Toledo, OH', 'Cleveland, OH', 'Columbus, OH', 'Cincinnati, OH', 'Akron, OH',
+    'Ohio', 'Toledo', 'Cleveland', 'Columbus', 'Cincinnati', 'Akron',
     'Dayton, OH', 'Youngstown, OH', 'Canton, OH', 'Parma, OH'
 ];
 
+// Autocomplete: city, region, or address only (no industry/category/site)
+const SUGGESTION_TYPE = { location: 'location' };
+
 function getLocationSuggestions(query) {
     const q = (query || '').trim().toLowerCase();
-    const fromData = new Set();
+    const seen = new Set();
+    const result = [];
+
+    function addLocation(value) {
+        const v = value && String(value).trim();
+        if (!v || seen.has(v.toLowerCase())) return;
+        seen.add(v.toLowerCase());
+        result.push({ value: v, type: SUGGESTION_TYPE.location });
+    }
+
+    LOCATION_SUGGESTIONS_STATIC.forEach(addLocation);
     sources.forEach(s => {
-        if (s.name) fromData.add(s.name);
-        if (s.city) fromData.add(s.city + (s.region ? ', ' + s.region : ''));
+        if (s.city) addLocation(s.city + (s.region ? ', ' + s.region : ''));
     });
     consumers.forEach(c => {
-        if (c.name) fromData.add(c.name);
-        if (c.city) fromData.add(c.city + (c.region ? ', ' + c.region : ''));
+        if (c.city) addLocation(c.city + (c.region ? ', ' + c.region : ''));
     });
-    const combined = [...LOCATION_SUGGESTIONS_STATIC, ...fromData];
-    if (!q) return combined.slice(0, 12);
-    return combined.filter(s => s.toLowerCase().includes(q)).slice(0, 12);
+
+    let list = result;
+    if (q) list = result.filter(({ value }) => value.toLowerCase().includes(q));
+    return list.slice(0, 20);
 }
 
 function showAutocomplete(query) {
     const listEl = document.getElementById('autocompleteList');
     if (!listEl) return;
     const suggestions = getLocationSuggestions(query);
-    listEl.innerHTML = suggestions.map((s, i) =>
-        `<li class="autocomplete-item" data-index="${i}" data-value="${s.replace(/"/g, '&quot;')}">${s}</li>`
-    ).join('');
+    listEl.innerHTML = suggestions.map((s, i) => {
+        const safeValue = (s.value || '').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        return `<li class="autocomplete-item" data-index="${i}" data-value="${safeValue}" data-type="location" role="option">
+            <span class="autocomplete-item-value">${safeValue}</span>
+        </li>`;
+    }).join('');
     listEl.setAttribute('aria-hidden', suggestions.length === 0 ? 'true' : 'false');
     if (suggestions.length > 0) {
         listEl.style.display = 'block';
@@ -91,6 +109,19 @@ function hideAutocomplete() {
     }
 }
 
+// Fetch all tags (industries + categories) from API for search autocomplete
+async function fetchTags() {
+    try {
+        const res = await fetch(`${API_BASE_URL}/api/tags`);
+        if (res.ok) {
+            const data = await res.json();
+            allTags = { industries: data.industries || [], categories: data.categories || [] };
+        }
+    } catch (e) {
+        console.warn('Could not fetch tags for search:', e);
+    }
+}
+
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', async () => {
     console.log('HeatGrid initializing...');
@@ -98,6 +129,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Show loading states
     showLoading('rankingsBody', 'Loading heat sources...');
     document.getElementById('markerCounts').innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading...';
+    
+    // Fetch tags so search has access to all database tags
+    await fetchTags();
     
     // Initialize map with fallback
     await initMap();
@@ -195,6 +229,10 @@ async function initMap() {
         map.on('load', () => {
             mapInitialized = true;
             map.resize();
+            if (sources.length > 0 || consumers.length > 0) {
+                updateMarkers();
+                fitMarkersToBounds();
+            }
         });
 
         map.on('error', (e) => {
@@ -265,6 +303,9 @@ async function loadData(searchQuery = '') {
         // Update UI
         if (mapInitialized) {
             updateMarkers();
+            if (sourceMarkers.length > 0 || consumerMarkers.length > 0) {
+                fitMarkersToBounds();
+            }
         }
         updateSelectors();
         updateMarkerCounts();
@@ -402,11 +443,11 @@ function updateSelectors() {
     updateCalculateButton();
 }
 
-// Update marker counts in UI
+// Update marker counts in UI (use data lengths so count is correct even before map is ready)
 function updateMarkerCounts() {
     const markerCounts = document.getElementById('markerCounts');
     if (markerCounts) {
-        markerCounts.innerHTML = `<i class="fas fa-map-marker-alt"></i> ${sourceMarkers.length} sources, ${consumerMarkers.length} consumers`;
+        markerCounts.innerHTML = `<i class="fas fa-map-marker-alt"></i> ${sources.length} sources, ${consumers.length} consumers`;
     }
 }
 
@@ -577,12 +618,13 @@ function highlightSelected() {
     }
 }
 
-// Fit map to show all markers
+// Fit map to show all markers (zoom animation: 2 seconds)
+const FIT_BOUNDS_DURATION_MS = 2000;
+
 function fitMarkersToBounds() {
     if (!map || !mapInitialized) return;
     
     if (sourceMarkers.length === 0 && consumerMarkers.length === 0) {
-        alert('No markers to fit');
         return;
     }
     
@@ -596,7 +638,7 @@ function fitMarkersToBounds() {
         bounds.extend(marker.getLngLat());
     });
     
-    map.fitBounds(bounds, { padding: 50, duration: 1000 });
+    map.fitBounds(bounds, { padding: 50, duration: FIT_BOUNDS_DURATION_MS, maxZoom: 14 });
 }
 
 // Calculate opportunity for selected source and consumer

@@ -3,14 +3,16 @@ import {
   searchPlacesByKeywords,
   isLocationServiceConfigured,
   TOLEDO_OHIO_BBOX,
+  geocodeAddress,
 } from "./location-service";
 import { DEFAULT_ASSUMPTIONS } from "../../shared/constants";
 import { searchTokens } from "./query-utils";
+import { haversineDistanceKm } from "../lib/calculations/distance";
 
 const BASE_WASTE_HEAT_MWH = 5000;
 
-/** Search phrases for heat sources in Toledo, OH (AWS Location Service). */
-const HEAT_SOURCE_KEYWORDS = [
+/** Search phrases for heat sources in Toledo, OH (AWS Location Service). Exported for tags API. */
+export const HEAT_SOURCE_KEYWORDS = [
   "Factory",
   "Manufacturing",
   "Data Centers",
@@ -258,24 +260,74 @@ async function getToledoHeatSourcesFromAWS(): Promise<HeatSource[]> {
   }));
 }
 
+/** Radius (km) for "exact address" search: return sources within this distance of the geocoded point. */
+const ADDRESS_SEARCH_RADIUS_KM = 50;
+
+/**
+ * Returns heat sources within radius (km) of a point. Used when search is an exact address.
+ */
+function filterSourcesByDistance(
+  list: HeatSource[],
+  centerLat: number,
+  centerLon: number,
+  radiusKm: number
+): HeatSource[] {
+  return list.filter((s) => {
+    const d = haversineDistanceKm(s.latitude, s.longitude, centerLat, centerLon);
+    return d <= radiusKm;
+  });
+}
+
 /**
  * Returns heat sources for the backend API.
- * Primary: AWS Location Search. Fallback: heat-sources.ts seed data when AWS is unavailable or returns no results.
+ * - Exact address: geocode query, then return sources whose lat/long is within ADDRESS_SEARCH_RADIUS_KM.
+ * - City/region: similar-string match on name, industry, location tokens.
+ * Primary: AWS Location Search. Fallback: heat-sources.ts seed data.
  */
 export async function getHeatSources(options?: {
   locationSearchQuery?: string;
 }): Promise<HeatSource[]> {
   const query = options?.locationSearchQuery?.trim() ?? "";
+
+  if (query && isLocationServiceConfigured()) {
+    const coords = await geocodeAddress(query);
+    if (coords) {
+      const [lng, lat] = coords;
+      let candidates: HeatSource[];
+      try {
+        const aws = await getToledoHeatSourcesFromAWS();
+        candidates = aws.length > 0 ? aws : [...HEAT_SOURCES_OHIO];
+      } catch {
+        candidates = [...HEAT_SOURCES_OHIO];
+      }
+      return filterSourcesByDistance(candidates, lat, lng, ADDRESS_SEARCH_RADIUS_KM);
+    }
+  }
+
   if (isLocationServiceConfigured()) {
     try {
       const awsSources = await getToledoHeatSourcesFromAWS();
-      if (awsSources.length > 0) return awsSources;
+      if (awsSources.length > 0) {
+        if (query) {
+          const tokens = searchTokens(query);
+          if (tokens.length > 0) {
+            const nameLower = (s: HeatSource) => s.name.toLowerCase();
+            const industryLower = (s: HeatSource) => s.industry.toLowerCase();
+            const filtered = awsSources.filter((s) =>
+              tokens.some(
+                (t) => nameLower(s).includes(t) || industryLower(s).includes(t)
+              )
+            );
+            if (filtered.length > 0) return filtered;
+          }
+        }
+        return awsSources;
+      }
     } catch {
       // fall through to fallback
     }
   }
-  const seedResults = filterOhioSourcesByQuery(query);
-  return seedResults;
+  return filterOhioSourcesByQuery(query);
 }
 
 /**

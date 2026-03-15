@@ -11,6 +11,7 @@ import {
   handleGetHeatConsumers,
   handleEvaluateOpportunity,
   handleGetRankedOpportunities,
+  handleGetTags,
 } from "./api";
 
 const app = express();
@@ -75,6 +76,16 @@ app.get("/api/ranked-opportunities", async (_req, res) => {
   } catch (err) {
     console.error("GET /api/ranked-opportunities", err);
     res.status(500).json({ error: "Failed to fetch ranked opportunities" });
+  }
+});
+
+app.get("/api/tags", (_req, res) => {
+  try {
+    const data = handleGetTags();
+    res.json(data);
+  } catch (err) {
+    console.error("GET /api/tags", err);
+    res.status(500).json({ error: "Failed to fetch tags" });
   }
 });
 
