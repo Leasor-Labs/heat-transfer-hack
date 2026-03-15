@@ -14,7 +14,7 @@ function getEnv(key: string): string | undefined {
   }
 }
 
-const PLACE_INDEX_NAME = getEnv("PLACE_INDEX_NAME") ?? "";
+const PLACE_INDEX_NAME = getEnv("PLACE_INDEX_NAME") ?? "locationFinder";
 const AWS_REGION = getEnv("AWS_REGION") ?? "us-east-1";
 
 export type PlaceResult = {
