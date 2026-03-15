@@ -75,3 +75,18 @@ When `HEAT_SOURCES_TABLE` and `HEAT_CONSUMERS_TABLE` are set, these endpoints re
 2. `npm run dev` (with the same env vars).
 3. Open or `curl` `http://localhost:3000/api/health` — confirm `dynamo.configured` and counts.
 4. Open or `curl` `http://localhost:3000/api/heat-sources` and `http://localhost:3000/api/heat-consumers` — confirm the seeded records.
+
+## 4. Test the API (local or deployed)
+
+Run the small test script against the API base URL:
+
+```bash
+# Local server (after npm run dev)
+npm run test:api
+
+# Or against a deployed API Gateway URL
+API_BASE_URL=https://xxxx.execute-api.us-east-1.amazonaws.com/dev npm run test:api
+# Or: node scripts/test-api.js https://xxxx.execute-api.us-east-1.amazonaws.com/dev
+```
+
+The script checks `GET /api/health`, `GET /api/heat-sources`, and `GET /api/heat-consumers` and exits 0 if all pass. Use it to confirm DynamoDB, API Gateway, and Lambda work together after deploy (see [AMPLIFY_API.md](AMPLIFY_API.md)).

@@ -1,15 +1,19 @@
 import type { GetRankedOpportunitiesResponse } from "../../../shared/api-contract";
 import type { OpportunityRanking } from "../../../shared/types";
-import { HEAT_SOURCES_OHIO } from "../../data/heat-sources-ohio";
-import { HEAT_CONSUMERS_OHIO } from "../../data/heat-consumers-ohio";
+import { getHeatSources } from "../../data/heat-sources";
+import { getHeatConsumers } from "../../data/heat-consumers";
 import { evaluateOpportunity } from "../../lib/integration/evaluate-opportunity";
 
 /**
- * Returns all opportunities from seed sources and consumers, ranked by feasibility score (desc).
+ * Returns all opportunities from heat sources and consumers (DynamoDB when configured, else Ohio seed), ranked by feasibility score (desc).
  */
 export async function handleGetRankedOpportunities(): Promise<GetRankedOpportunitiesResponse> {
-  const sources = [...HEAT_SOURCES_OHIO];
-  const consumers = [...HEAT_CONSUMERS_OHIO];
+  const [sourcesList, consumersList] = await Promise.all([
+    getHeatSources(),
+    getHeatConsumers(),
+  ]);
+  const sources = sourcesList;
+  const consumers = consumersList;
   const opportunities: OpportunityRanking[] = [];
   for (const source of sources) {
     for (const consumer of consumers) {
