@@ -822,24 +822,26 @@ function updateRangeCircleAndHighlights() {
     highlightSelected();
 
     // Compile opposing heat types into a list and fetch Best Score rankings.
-    // When a source is selected, send that source plus ALL consumers within 2 km.
-    // When a consumer is selected, send that consumer plus ALL sources within 2 km.
-    if (inRangeOpposingConsumerIds.length > 0 && selectedSourceId) {
-        const selectedSource = sources.find(s => s.id === selectedSourceId);
-        const inRangeConsumers = consumers.filter(c => inRangeOpposingConsumerIds.indexOf(c.id) !== -1);
-        loadRankedInRangeOpportunities(
-            selectedSource && inRangeConsumers.length
-                ? { source: selectedSource, consumers: inRangeConsumers }
-                : { sourceId: selectedSourceId, consumerIds: inRangeOpposingConsumerIds }
-        );
-    } else if (inRangeOpposingSourceIds.length > 0 && selectedConsumerId) {
-        const selectedConsumer = consumers.find(c => c.id === selectedConsumerId);
-        const inRangeSources = sources.filter(s => inRangeOpposingSourceIds.indexOf(s.id) !== -1);
-        loadRankedInRangeOpportunities(
-            selectedConsumer && inRangeSources.length
-                ? { consumer: selectedConsumer, sources: inRangeSources }
-                : { consumerId: selectedConsumerId, sourceIds: inRangeOpposingSourceIds }
-        );
+    // If anything is selected on the map, always populate the rank system with up to 9 items
+    // using the backend scoring (src/lib). Prefer in-range items; if none, fall back to all.
+    if (selectedSourceId && consumers.length > 0) {
+        const ids = (inRangeOpposingConsumerIds.length ? inRangeOpposingConsumerIds : consumers.map(c => c.id))
+            .slice(0, 9);
+        if (ids.length > 0) {
+            loadRankedInRangeOpportunities({ sourceId: selectedSourceId, consumerIds: ids });
+        } else {
+            rankedInRangeOpportunities = [];
+            displayNearbyRankings();
+        }
+    } else if (selectedConsumerId && sources.length > 0) {
+        const ids = (inRangeOpposingSourceIds.length ? inRangeOpposingSourceIds : sources.map(s => s.id))
+            .slice(0, 9);
+        if (ids.length > 0) {
+            loadRankedInRangeOpportunities({ consumerId: selectedConsumerId, sourceIds: ids });
+        } else {
+            rankedInRangeOpportunities = [];
+            displayNearbyRankings();
+        }
     } else {
         rankedInRangeOpportunities = [];
         displayNearbyRankings();
@@ -988,7 +990,9 @@ function displayNearbyRankings() {
     if (emptyEl) emptyEl.style.display = 'none';
 
     let html = '';
-    rankedInRangeOpportunities.forEach((item) => {
+    // Show between 1 and 9 ranked items (when available) using the Best Score from the lib-based API.
+    const topRankings = rankedInRangeOpportunities.slice(0, Math.min(9, rankedInRangeOpportunities.length));
+    topRankings.forEach((item) => {
         const opp = item.opportunity;
         const name = hasSource ? getConsumerName(opp.consumerId) : getSourceName(opp.sourceId);
         const score = item.bestScore != null ? item.bestScore : (opp.feasibilityScore ?? 0);
