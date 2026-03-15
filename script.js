@@ -234,11 +234,15 @@ async function initMap() {
             console.log('Using inline OSM fallback map');
         }
 
-        map = new maplibregl.Map({
+        const map = new maplibregl.Map({
             container: 'map',
             style: style,
-            center: [-82.5, 40.0],
-            zoom: 7
+            center: [-82.5, 40.0], // Center of Ohio
+            zoom: 7,
+           maxBounds: [
+            [-84.82, 40.52], // Southwest corner of northwest Ohio
+            [-83.00, 41.78]  // Northeast corner of northwest Ohio
+        ]
         });
 
         map.addControl(new maplibregl.NavigationControl(), 'top-left');
