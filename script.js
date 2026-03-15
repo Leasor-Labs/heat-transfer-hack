@@ -499,6 +499,9 @@ function setupEventListeners() {
                 return;
             }
             await loadData(query);
+            // Open popup showing DynamoDB data (same query as search)
+            const popupUrl = window.location.origin + '/src/temp-popup/popup.html' + (query ? '?q=' + encodeURIComponent(query) : '');
+            window.open(popupUrl, 'dynamodb-popup', 'width=720,height=620,scrollbars=yes,resizable=yes');
         });
     }
     
