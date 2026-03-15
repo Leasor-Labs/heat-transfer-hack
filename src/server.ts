@@ -11,7 +11,7 @@ import {
   handleGetHeatSources,
   handleGetHeatConsumers,
   handleEvaluateOpportunity,
-  handleGetRankedOpportunities,
+  // Future Feature: handleGetRankedOpportunities,
   handleGetTags,
 } from "./api";
 import { getDynamoStatus } from "./api/dynamo-status";
@@ -97,15 +97,16 @@ app.post("/api/evaluate-opportunity", async (req, res) => {
   }
 });
 
-app.get("/api/ranked-opportunities", async (_req, res) => {
-  try {
-    const data = await handleGetRankedOpportunities();
-    res.json(data);
-  } catch (err) {
-    console.error("GET /api/ranked-opportunities", err);
-    res.status(500).json({ error: "Failed to fetch ranked opportunities" });
-  }
-});
+// Future Feature: ranked-opportunities API
+// app.get("/api/ranked-opportunities", async (_req, res) => {
+//   try {
+//     const data = await handleGetRankedOpportunities();
+//     res.json(data);
+//   } catch (err) {
+//     console.error("GET /api/ranked-opportunities", err);
+//     res.status(500).json({ error: "Failed to fetch ranked opportunities" });
+//   }
+// });
 
 // Refresh DynamoDB from AWS Location Service (keywords). Called on page load and when search is used.
 app.get("/api/refresh-seed-from-location", async (_req, res) => {

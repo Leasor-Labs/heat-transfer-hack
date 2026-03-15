@@ -1,9 +1,11 @@
+import type { GetHeatSourcesResponse } from "../../shared/api-contract";
 import type { HeatSource } from "../../shared/types";
 import {
-  searchPlacesByKeywords,
+  searchPlacesByText,
   isLocationServiceConfigured,
   TOLEDO_OHIO_BBOX,
   geocodeAddress,
+  searchPlacesByKeywords,
 } from "./location-service";
 import { haversineDistanceKm } from "../lib/calculations/distance";
 import { HEAT_SOURCE_KEYWORDS } from "./search-keywords";
@@ -13,6 +15,7 @@ import {
   fetchHeatSourcesFromDynamo,
   fetchHeatSourceByIdFromDynamo,
 } from "../api/dynamo-heat-sources";
+import { FALLBACK_HEAT_SOURCES } from "./fallback-seed-data";
 
 const BASE_WASTE_HEAT_MWH = 5000;
 
@@ -59,34 +62,95 @@ function filterSourcesByDistance(
   });
 }
 
+/** Convert AWS Location place results to HeatSource with default heat values. */
+function placesToHeatSources(
+  places: Array<{ placeId: string; label: string; position: [number, number] }>,
+  industry = "Industrial"
+): HeatSource[] {
+  return places.map((p, i) => ({
+    id: `location-source-${i}-${p.placeId}`,
+    name: p.label || `Industrial site ${i + 1}`,
+    industry,
+    latitude: p.position[1],
+    longitude: p.position[0],
+    estimatedWasteHeatMWhPerYear:
+      BASE_WASTE_HEAT_MWH * DEFAULT_ASSUMPTIONS.wasteHeatFraction,
+    recoverableHeatMWhPerYear:
+      BASE_WASTE_HEAT_MWH *
+      DEFAULT_ASSUMPTIONS.wasteHeatFraction *
+      DEFAULT_ASSUMPTIONS.recoveryFactor,
+    temperatureClass: "medium" as const,
+    operatingHoursPerYear: 8760,
+  }));
+}
+
+/** Filter backup heat sources by keyword (name or industry). */
+function filterFallbackSourcesByKeyword(
+  keyword: string,
+  list: HeatSource[] = FALLBACK_HEAT_SOURCES
+): HeatSource[] {
+  const k = keyword.trim().toLowerCase();
+  if (!k) return list;
+  return list.filter(
+    (s) =>
+      (s.name && s.name.toLowerCase().includes(k)) ||
+      (s.industry && s.industry.toLowerCase().includes(k))
+  );
+}
+
 /**
  * Returns heat sources for the backend API.
- * Uses DynamoDB when configured; when location search is used and Location Service is available,
- * tries AWS first and falls back to DynamoDB (e.g. basic dataset) on failure or empty. No table => [].
+ * When search query is present and AWS Location is configured: searches places by keyword;
+ * on communication failure returns errorCode 25. When AWS is not configured, filters backup data by keyword.
  */
 export async function getHeatSources(options?: {
   locationSearchQuery?: string;
-}): Promise<HeatSource[]> {
+}): Promise<GetHeatSourcesResponse> {
   const query = options?.locationSearchQuery?.trim() ?? "";
 
   if (query && isLocationServiceConfigured()) {
-    const coords = await geocodeAddress(query);
-    if (coords) {
-      const [lng, lat] = coords;
-      let candidates: HeatSource[];
-      try {
-        const aws = await getToledoHeatSourcesFromAWS();
-        candidates = aws.length > 0 ? aws : (HEAT_SOURCES_TABLE ? await fetchHeatSourcesFromDynamo() : []);
-      } catch {
-        candidates = HEAT_SOURCES_TABLE ? await fetchHeatSourcesFromDynamo() : [];
+    try {
+      const places = await searchPlacesByText(query, {
+        maxResults: 20,
+        filterBBox: TOLEDO_OHIO_BBOX,
+      });
+      if (places.length > 0) {
+        const heatSources = placesToHeatSources(places, query);
+        return { heatSources };
       }
-      return filterSourcesByDistance(candidates, coords[1], coords[0], ADDRESS_SEARCH_RADIUS_KM);
+      const coords = await geocodeAddress(query);
+      if (coords) {
+        const aws = await getToledoHeatSourcesFromAWS();
+        const candidates =
+          aws.length > 0
+            ? aws
+            : HEAT_SOURCES_TABLE
+              ? await fetchHeatSourcesFromDynamo()
+              : [];
+        const heatSources = filterSourcesByDistance(
+          candidates,
+          coords[1],
+          coords[0],
+          ADDRESS_SEARCH_RADIUS_KM
+        );
+        return { heatSources };
+      }
+      return { heatSources: [] };
+    } catch {
+      return { heatSources: [], errorCode: 25 };
     }
   }
-  if (HEAT_SOURCES_TABLE) {
-    return fetchHeatSourcesFromDynamo();
+
+  if (query && !isLocationServiceConfigured()) {
+    const heatSources = filterFallbackSourcesByKeyword(query);
+    return { heatSources };
   }
-  return [];
+
+  if (HEAT_SOURCES_TABLE) {
+    const heatSources = await fetchHeatSourcesFromDynamo();
+    return { heatSources };
+  }
+  return { heatSources: [] };
 }
 
 /**

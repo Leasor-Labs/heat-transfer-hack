@@ -31,7 +31,7 @@ let lastOpenSourcePopup = null;
 let lastOpenConsumerPopup = null;
 let currentRouteLayer = null;
 let currentOpportunity = null;
-let allRankings = [];
+// Future Feature: let allRankings = [];
 let mapInitialized = false;
 
 // All tags from database (industries + categories) for search autocomplete
@@ -134,7 +134,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     
     // No initial data load — map loads with no markers until user searches
-    showLoading('rankingsBody', 'Enter a location and click Search to load data.');
+    // Future Feature: showLoading('rankingsBody', 'Enter a location and click Search to load data.');
     document.getElementById('markerCounts').innerHTML = '<i class="fas fa-map-marker-alt"></i> 0 sources, 0 consumers';
     
     // Fetch tags so search has access to all database tags
@@ -273,7 +273,7 @@ async function initMap() {
 // Load data from backend
 async function loadData(searchQuery = '') {
     try {
-        showLoading('rankingsBody', 'Loading heat sources and consumers...');
+        // Future Feature: showLoading('rankingsBody', 'Loading heat sources and consumers...');
         
         let sourcesUrl = `${API_BASE_URL}/api/heat-sources`;
         let consumersUrl = `${API_BASE_URL}/api/heat-consumers`;
@@ -311,14 +311,17 @@ async function loadData(searchQuery = '') {
             console.warn('API not available for consumers, using Ohio seed fallback');
         }
         
-        const apiSources = (sourcesData.heatSources && sourcesData.heatSources.length) ? (sourcesData.heatSources || []) : [];
-        const apiConsumers = (consumersData.heatConsumers && consumersData.heatConsumers.length) ? (consumersData.heatConsumers || []) : [];
+        const apiSources = sourcesData.heatSources || [];
+        const apiConsumers = consumersData.heatConsumers || [];
         const searchWasUsed = searchQuery.length > 0;
+        const errorCode25 = (sourcesData.errorCode === 25) || (consumersData.errorCode === 25);
 
         sources = searchWasUsed ? apiSources : (apiSources.length ? apiSources : OHIO_HEAT_SOURCES_FALLBACK);
         consumers = searchWasUsed ? apiConsumers : (apiConsumers.length ? apiConsumers : OHIO_HEAT_CONSUMERS_FALLBACK);
 
-        if (searchWasUsed && sources.length === 0 && consumers.length === 0) {
+        if (errorCode25) {
+            showSearchBanner('Error 25', true);
+        } else if (searchWasUsed && sources.length === 0 && consumers.length === 0) {
             showSearchBanner(searchQuery + ' not found', true);
         } else {
             showSearchBanner('', false);
@@ -340,7 +343,7 @@ async function loadData(searchQuery = '') {
         
         // Show message if no data
         if (sources.length === 0 && consumers.length === 0 && !searchWasUsed) {
-            showError('rankingsBody', 'No heat sources or consumers found. Try a different search.');
+            // Future Feature: showError('rankingsBody', 'No heat sources or consumers found. Try a different search.');
         }
         
     } catch (error) {
@@ -351,7 +354,7 @@ async function loadData(searchQuery = '') {
         if (mapInitialized) updateMarkers();
         updateSelectors();
         updateMarkerCounts();
-        showError('rankingsBody', 'Using Ohio seed data (API unavailable).');
+        // Future Feature: showError('rankingsBody', 'Using Ohio seed data (API unavailable).');
     }
 }
 
@@ -772,13 +775,13 @@ async function calculateOpportunity() {
             resultsSection.scrollIntoView({ behavior: 'smooth' });
         }
         
-        // Load and show rankings for the selected source
-        await loadRankings(selectedSourceId);
-        const rankingsSection = document.querySelector('.rankings-section');
-        if (rankingsSection) {
-            rankingsSection.style.display = 'block';
-            rankingsSection.scrollIntoView({ behavior: 'smooth' });
-        }
+        // Future Feature: Load and show rankings for the selected source
+        // await loadRankings(selectedSourceId);
+        // const rankingsSection = document.querySelector('.rankings-section');
+        // if (rankingsSection) {
+        //     rankingsSection.style.display = 'block';
+        //     rankingsSection.scrollIntoView({ behavior: 'smooth' });
+        // }
         
     } catch (error) {
         console.error('Error calculating opportunity:', error);
@@ -794,30 +797,30 @@ async function calculateOpportunity() {
             resultsSection.scrollIntoView({ behavior: 'smooth' });
         }
         
-        // Load and show rankings for the selected source
-        await loadRankings(selectedSourceId);
-        const rankingsSection = document.querySelector('.rankings-section');
-        if (rankingsSection) {
-            rankingsSection.style.display = 'block';
-            rankingsSection.scrollIntoView({ behavior: 'smooth' });
-        }
+        // Future Feature: Load and show rankings for the selected source
+        // await loadRankings(selectedSourceId);
+        // const rankingsSection = document.querySelector('.rankings-section');
+        // if (rankingsSection) {
+        //     rankingsSection.style.display = 'block';
+        //     rankingsSection.scrollIntoView({ behavior: 'smooth' });
+        // }
         
     } finally {
         // Restore button
         calculateBtn.innerHTML = originalText;
         calculateBtn.disabled = false;
 
-        // Always attempt to load and show rankings (defensive — show UI even if calculation failed)
-        try {
-            await loadRankings(selectedSourceId);
-        } catch (e) {
-            console.warn('Failed to load rankings in finally:', e);
-        }
-        const rankingsSection = document.querySelector('.rankings-section');
-        if (rankingsSection) {
-            rankingsSection.style.display = 'block';
-            rankingsSection.scrollIntoView({ behavior: 'smooth' });
-        }
+        // Future Feature: Always attempt to load and show rankings
+        // try {
+        //     await loadRankings(selectedSourceId);
+        // } catch (e) {
+        //     console.warn('Failed to load rankings in finally:', e);
+        // }
+        // const rankingsSection = document.querySelector('.rankings-section');
+        // if (rankingsSection) {
+        //     rankingsSection.style.display = 'block';
+        //     rankingsSection.scrollIntoView({ behavior: 'smooth' });
+        // }
     }
 }
 
@@ -1099,112 +1102,88 @@ function createFinancialChart(initialCost, annualSavings) {
     });
 }
 
-// Load ranked opportunities
-async function loadRankings(sourceId = null) {
-    try {
-        const response = await fetch(`${API_BASE_URL}/api/ranked-opportunities`);
-        
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        
-        const data = await response.json();
-        allRankings = data.rankings || [];
-        displayRankings(allRankings, sourceId);
-        
-    } catch (error) {
-        console.error('Error loading rankings:', error);
-        showError('rankingsBody', 'Failed to load rankings. Using demo data.');
-        
-        // Create demo rankings
-        createDemoRankings(sourceId);
-    }
-}
+// Future Feature: Load ranked opportunities
+// async function loadRankings(sourceId = null) {
+//     try {
+//         const response = await fetch(`${API_BASE_URL}/api/ranked-opportunities`);
+//         if (!response.ok) {
+//             throw new Error(`HTTP error! status: ${response.status}`);
+//         }
+//         const data = await response.json();
+//         allRankings = data.rankings || [];
+//         displayRankings(allRankings, sourceId);
+//     } catch (error) {
+//         console.error('Error loading rankings:', error);
+//         showError('rankingsBody', 'Failed to load rankings. Using demo data.');
+//         createDemoRankings(sourceId);
+//     }
+// }
 
-// Create demo rankings for testing
-function createDemoRankings(sourceId = null) {
-    if (sources.length === 0 || consumers.length === 0) return;
-    
-    const demoRankings = [];
-    
-    const sourcesToUse = sourceId ? sources.filter(s => s.id === sourceId) : sources.slice(0, Math.min(5, sources.length));
-    
-    for (let i = 0; i < sourcesToUse.length; i++) {
-        for (let j = 0; j < consumers.length; j++) {
-            const source = sourcesToUse[i];
-            const consumer = consumers[j];
-            
-            if (!source || !consumer) continue;
-            
-            const distance = calculateHaversineDistance(
-                source.latitude, source.longitude,
-                consumer.latitude, consumer.longitude
-            );
-            
-            demoRankings.push({
-                rank: demoRankings.length + 1,
-                opportunity: {
-                    sourceId: source.id,
-                    consumerId: consumer.id,
-                    distanceKm: distance,
-                    financialModel: {
-                        paybackYears: distance * 0.5 + 2
-                    },
-                    feasibilityScore: Math.round(100 - distance)
-                }
-            });
-        }
-    }
-    
-    displayRankings(demoRankings, sourceId);
-}
+// Future Feature: Create demo rankings for testing
+// function createDemoRankings(sourceId = null) {
+//     if (sources.length === 0 || consumers.length === 0) return;
+//     const demoRankings = [];
+//     const sourcesToUse = sourceId ? sources.filter(s => s.id === sourceId) : sources.slice(0, Math.min(5, sources.length));
+//     for (let i = 0; i < sourcesToUse.length; i++) {
+//         for (let j = 0; j < consumers.length; j++) {
+//             const source = sourcesToUse[i];
+//             const consumer = consumers[j];
+//             if (!source || !consumer) continue;
+//             const distance = calculateHaversineDistance(
+//                 source.latitude, source.longitude,
+//                 consumer.latitude, consumer.longitude
+//             );
+//             demoRankings.push({
+//                 rank: demoRankings.length + 1,
+//                 opportunity: {
+//                     sourceId: source.id,
+//                     consumerId: consumer.id,
+//                     distanceKm: distance,
+//                     financialModel: { paybackYears: distance * 0.5 + 2 },
+//                     feasibilityScore: Math.round(100 - distance)
+//                 }
+//             });
+//         }
+//     }
+//     displayRankings(demoRankings, sourceId);
+// }
 
-// Display rankings
-function displayRankings(rankings, sourceId = null) {
-    const tbody = document.getElementById('rankingsBody');
-    if (!tbody) return;
-    
-    if (!rankings || rankings.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="loading">No rankings available</td></tr>';
-        return;
-    }
-    
-    // Filter rankings if sourceId is provided
-    const filteredRankings = sourceId ? rankings.filter(r => r.opportunity.sourceId === sourceId) : rankings;
-    
-    // Sort by feasibility score (descending) then re-rank the filtered list
-    filteredRankings.sort((a, b) => {
-        const aScore = (a && a.opportunity && a.opportunity.feasibilityScore) || 0;
-        const bScore = (b && b.opportunity && b.opportunity.feasibilityScore) || 0;
-        return bScore - aScore;
-    });
-    filteredRankings.forEach((item, index) => {
-        item.rank = index + 1;
-    });
-    
-    let html = '';
-    filteredRankings.slice(0, 10).forEach((item, index) => {
-        const opp = item.opportunity;
-        const sourceName = getSourceName(opp.sourceId);
-        const consumerName = getConsumerName(opp.consumerId);
-        
-        html += `
-            <tr onclick="selectOpportunity('${opp.sourceId}', '${opp.consumerId}')">
-                <td><strong>#${item.rank || index + 1}</strong></td>
-                <td>${sourceName}</td>
-                <td>${consumerName}</td>
-                <td>${(opp.distanceKm || 0).toFixed(1)} km</td>
-                <td>${(opp.financialModel?.paybackYears || 0).toFixed(1)} yrs</td>
-                <td><span class="score-badge">${opp.feasibilityScore || 0}</span></td>
-                <td><button class="btn-small" onclick="event.stopPropagation(); selectOpportunity('${opp.sourceId}', '${opp.consumerId}')">
-                    <i class="fas fa-eye"></i> View
-                </button></td>
-            </tr>
-        `;
-    });
-    
-    tbody.innerHTML = html;
-}
+// Future Feature: Display rankings
+// function displayRankings(rankings, sourceId = null) {
+//     const tbody = document.getElementById('rankingsBody');
+//     if (!tbody) return;
+//     if (!rankings || rankings.length === 0) {
+//         tbody.innerHTML = '<tr><td colspan="7" class="loading">No rankings available</td></tr>';
+//         return;
+//     }
+//     const filteredRankings = sourceId ? rankings.filter(r => r.opportunity.sourceId === sourceId) : rankings;
+//     filteredRankings.sort((a, b) => {
+//         const aScore = (a && a.opportunity && a.opportunity.feasibilityScore) || 0;
+//         const bScore = (b && b.opportunity && b.opportunity.feasibilityScore) || 0;
+//         return bScore - aScore;
+//     });
+//     filteredRankings.forEach((item, index) => { item.rank = index + 1; });
+//     let html = '';
+//     filteredRankings.slice(0, 10).forEach((item, index) => {
+//         const opp = item.opportunity;
+//         const sourceName = getSourceName(opp.sourceId);
+//         const consumerName = getConsumerName(opp.consumerId);
+//         html += `
+//             <tr onclick="selectOpportunity('${opp.sourceId}', '${opp.consumerId}')">
+//                 <td><strong>#${item.rank || index + 1}</strong></td>
+//                 <td>${sourceName}</td>
+//                 <td>${consumerName}</td>
+//                 <td>${(opp.distanceKm || 0).toFixed(1)} km</td>
+//                 <td>${(opp.financialModel?.paybackYears || 0).toFixed(1)} yrs</td>
+//                 <td><span class="score-badge">${opp.feasibilityScore || 0}</span></td>
+//                 <td><button class="btn-small" onclick="event.stopPropagation(); selectOpportunity('${opp.sourceId}', '${opp.consumerId}')">
+//                     <i class="fas fa-eye"></i> View
+//                 </button></td>
+//             </tr>
+//         `;
+//     });
+//     tbody.innerHTML = html;
+// }
 
 // Helper to get source name by ID
 function getSourceName(id) {
@@ -1218,21 +1197,18 @@ function getConsumerName(id) {
     return consumer ? consumer.name : 'Unknown Consumer';
 }
 
-// Select opportunity from rankings
-function selectOpportunity(sourceId, consumerId) {
-    selectedSourceId = sourceId;
-    selectedConsumerId = consumerId;
-    
-    const sourceSelect = document.getElementById('sourceSelect');
-    const consumerSelect = document.getElementById('consumerSelect');
-    
-    if (sourceSelect) sourceSelect.value = sourceId;
-    if (consumerSelect) consumerSelect.value = consumerId;
-    
-    highlightSelected();
-    updateCalculateButton();
-    calculateOpportunity();
-}
+// Future Feature: Select opportunity from rankings
+// function selectOpportunity(sourceId, consumerId) {
+//     selectedSourceId = sourceId;
+//     selectedConsumerId = consumerId;
+//     const sourceSelect = document.getElementById('sourceSelect');
+//     const consumerSelect = document.getElementById('consumerSelect');
+//     if (sourceSelect) sourceSelect.value = sourceId;
+//     if (consumerSelect) consumerSelect.value = consumerId;
+//     highlightSelected();
+//     updateCalculateButton();
+//     calculateOpportunity();
+// }
 
 // PDF generation
 function generatePdf() {

@@ -1,5 +1,7 @@
+import type { GetHeatConsumersResponse } from "../../shared/api-contract";
 import type { HeatConsumer } from "../../shared/types";
 import {
+  searchPlacesByText,
   searchPlacesByKeywords,
   isLocationServiceConfigured,
   TOLEDO_OHIO_BBOX,
@@ -12,6 +14,7 @@ import {
 } from "../api/dynamo-heat-consumers";
 import { haversineDistanceKm } from "../lib/calculations/distance";
 import { HEAT_CONSUMER_KEYWORDS } from "./search-keywords";
+import { FALLBACK_HEAT_CONSUMERS } from "./fallback-seed-data";
 
 const BASE_HEAT_DEMAND_MWH = 3000;
 
@@ -51,34 +54,88 @@ function filterConsumersByDistance(
   });
 }
 
+/** Convert AWS Location place results to HeatConsumer with default demand. */
+function placesToHeatConsumers(
+  places: Array<{ placeId: string; label: string; position: [number, number] }>,
+  category = "Building"
+): HeatConsumer[] {
+  return places.map((p, i) => ({
+    id: `location-consumer-${i}-${p.placeId}`,
+    name: p.label || `Consumer site ${i + 1}`,
+    category,
+    latitude: p.position[1],
+    longitude: p.position[0],
+    annualHeatDemandMWh: BASE_HEAT_DEMAND_MWH,
+  }));
+}
+
+/** Filter backup heat consumers by keyword (name or category). */
+function filterFallbackConsumersByKeyword(
+  keyword: string,
+  list: HeatConsumer[] = FALLBACK_HEAT_CONSUMERS
+): HeatConsumer[] {
+  const k = keyword.trim().toLowerCase();
+  if (!k) return list;
+  return list.filter(
+    (c) =>
+      (c.name && c.name.toLowerCase().includes(k)) ||
+      (c.category && c.category.toLowerCase().includes(k))
+  );
+}
+
 /**
  * Returns heat consumers for the backend API.
- * Uses DynamoDB when configured; when location search is used and Location Service is available,
- * tries AWS first and falls back to DynamoDB (e.g. basic dataset) on failure or empty. No table => [].
+ * When search query is present and AWS Location is configured: searches places by keyword;
+ * on communication failure returns errorCode 25. When AWS is not configured, filters backup data by keyword.
  */
 export async function getHeatConsumers(options?: {
   locationSearchQuery?: string;
-}): Promise<HeatConsumer[]> {
+}): Promise<GetHeatConsumersResponse> {
   const query = options?.locationSearchQuery?.trim() ?? "";
 
   if (query && isLocationServiceConfigured()) {
-    const coords = await geocodeAddress(query);
-    if (coords) {
-      const [lng, lat] = coords;
-      let candidates: HeatConsumer[];
-      try {
-        const aws = await getToledoHeatConsumersFromAWS();
-        candidates = aws.length > 0 ? aws : (HEAT_CONSUMERS_TABLE ? await fetchHeatConsumersFromDynamo() : []);
-      } catch {
-        candidates = HEAT_CONSUMERS_TABLE ? await fetchHeatConsumersFromDynamo() : [];
+    try {
+      const places = await searchPlacesByText(query, {
+        maxResults: 20,
+        filterBBox: TOLEDO_OHIO_BBOX,
+      });
+      if (places.length > 0) {
+        const heatConsumers = placesToHeatConsumers(places, query);
+        return { heatConsumers };
       }
-      return filterConsumersByDistance(candidates, coords[1], coords[0], ADDRESS_SEARCH_RADIUS_KM);
+      const coords = await geocodeAddress(query);
+      if (coords) {
+        const aws = await getToledoHeatConsumersFromAWS();
+        const candidates =
+          aws.length > 0
+            ? aws
+            : HEAT_CONSUMERS_TABLE
+              ? await fetchHeatConsumersFromDynamo()
+              : [];
+        const heatConsumers = filterConsumersByDistance(
+          candidates,
+          coords[1],
+          coords[0],
+          ADDRESS_SEARCH_RADIUS_KM
+        );
+        return { heatConsumers };
+      }
+      return { heatConsumers: [] };
+    } catch {
+      return { heatConsumers: [], errorCode: 25 };
     }
   }
-  if (HEAT_CONSUMERS_TABLE) {
-    return fetchHeatConsumersFromDynamo();
+
+  if (query && !isLocationServiceConfigured()) {
+    const heatConsumers = filterFallbackConsumersByKeyword(query);
+    return { heatConsumers };
   }
-  return [];
+
+  if (HEAT_CONSUMERS_TABLE) {
+    const heatConsumers = await fetchHeatConsumersFromDynamo();
+    return { heatConsumers };
+  }
+  return { heatConsumers: [] };
 }
 
 /**
