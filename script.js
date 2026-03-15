@@ -32,6 +32,65 @@ let currentOpportunity = null;
 let allRankings = [];
 let mapInitialized = false;
 
+// Location suggestions for autocomplete (Ohio cities/regions + from loaded data)
+const LOCATION_SUGGESTIONS_STATIC = [
+    'Cleveland, OH', 'Columbus, OH', 'Cincinnati, OH', 'Toledo, OH', 'Akron, OH',
+    'Ohio', 'Cleveland', 'Columbus', 'Cincinnati', 'Toledo', 'Akron',
+    'Dayton, OH', 'Youngstown, OH', 'Canton, OH', 'Parma, OH'
+];
+
+function getLocationSuggestions(query) {
+    const q = (query || '').trim().toLowerCase();
+    const fromData = new Set();
+    sources.forEach(s => {
+        if (s.name) fromData.add(s.name);
+        if (s.city) fromData.add(s.city + (s.region ? ', ' + s.region : ''));
+    });
+    consumers.forEach(c => {
+        if (c.name) fromData.add(c.name);
+        if (c.city) fromData.add(c.city + (c.region ? ', ' + c.region : ''));
+    });
+    const combined = [...LOCATION_SUGGESTIONS_STATIC, ...fromData];
+    if (!q) return combined.slice(0, 12);
+    return combined.filter(s => s.toLowerCase().includes(q)).slice(0, 12);
+}
+
+function showAutocomplete(query) {
+    const listEl = document.getElementById('autocompleteList');
+    if (!listEl) return;
+    const suggestions = getLocationSuggestions(query);
+    listEl.innerHTML = suggestions.map((s, i) =>
+        `<li class="autocomplete-item" data-index="${i}" data-value="${s.replace(/"/g, '&quot;')}">${s}</li>`
+    ).join('');
+    listEl.setAttribute('aria-hidden', suggestions.length === 0 ? 'true' : 'false');
+    if (suggestions.length > 0) {
+        listEl.style.display = 'block';
+        const items = listEl.querySelectorAll('.autocomplete-item');
+        items.forEach((el, i) => {
+            if (i === 0) el.classList.add('active');
+            el.addEventListener('click', () => {
+                const input = document.getElementById('locationSearch');
+                if (input) {
+                    input.value = el.getAttribute('data-value');
+                    listEl.setAttribute('aria-hidden', 'true');
+                    listEl.style.display = 'none';
+                    document.getElementById('searchBtn')?.click();
+                }
+            });
+        });
+    } else {
+        listEl.style.display = 'none';
+    }
+}
+
+function hideAutocomplete() {
+    const listEl = document.getElementById('autocompleteList');
+    if (listEl) {
+        listEl.setAttribute('aria-hidden', 'true');
+        listEl.style.display = 'none';
+    }
+}
+
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', async () => {
     console.log('HeatGrid initializing...');
@@ -402,11 +461,53 @@ function setupEventListeners() {
         pdfBtn.addEventListener('click', generatePdf);
     }
     
-    // Enter key in search
+    // Search input: autocomplete + Enter
     const searchInput = document.getElementById('locationSearch');
+    const autocompleteList = document.getElementById('autocompleteList');
     if (searchInput) {
-        searchInput.addEventListener('keypress', (e) => {
+        searchInput.addEventListener('input', () => {
+            showAutocomplete(searchInput.value);
+        });
+        searchInput.addEventListener('focus', () => {
+            showAutocomplete(searchInput.value);
+        });
+        searchInput.addEventListener('blur', () => {
+            setTimeout(hideAutocomplete, 180);
+        });
+        searchInput.addEventListener('keydown', (e) => {
+            const items = autocompleteList ? autocompleteList.querySelectorAll('.autocomplete-item') : [];
+            const active = autocompleteList ? autocompleteList.querySelector('.autocomplete-item.active') : null;
+            let idx = active ? Array.prototype.indexOf.call(items, active) : -1;
+
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                if (items.length) {
+                    idx = (idx + 1) % items.length;
+                    items.forEach((el, i) => el.classList.toggle('active', i === idx));
+                    items[idx]?.scrollIntoView({ block: 'nearest' });
+                }
+                return;
+            }
+            if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (items.length) {
+                    idx = idx <= 0 ? items.length - 1 : idx - 1;
+                    items.forEach((el, i) => el.classList.toggle('active', i === idx));
+                    items[idx]?.scrollIntoView({ block: 'nearest' });
+                }
+                return;
+            }
             if (e.key === 'Enter') {
+                if (items.length && idx >= 0 && items[idx]) {
+                    e.preventDefault();
+                    searchInput.value = items[idx].getAttribute('data-value');
+                    hideAutocomplete();
+                    document.getElementById('searchBtn')?.click();
+                }
+            }
+        });
+        searchInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && (!autocompleteList || autocompleteList.getAttribute('aria-hidden') === 'true')) {
                 document.getElementById('searchBtn')?.click();
             }
         });
