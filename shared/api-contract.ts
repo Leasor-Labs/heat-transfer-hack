@@ -13,6 +13,14 @@ export type GetHeatConsumersResponse = {
   heatConsumers: HeatConsumer[];
 };
 
+export type GetHeatSourceByIdResponse = {
+  heatSource: HeatSource;
+};
+
+export type GetHeatConsumerByIdResponse = {
+  heatConsumer: HeatConsumer;
+};
+
 export type EvaluateOpportunityRequest = {
   sourceId: string;
   consumerId: string;

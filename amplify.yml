@@ -1,0 +1,44 @@
+version: 1
+frontend:
+  phases:
+    preBuild:
+      commands:
+        - npm install
+    build:
+      commands:
+        # 1. Deploy backend (CDK)
+        - cd infrastructure && npm install && npx cdk bootstrap --force 2>/dev/null || true
+        - cd infrastructure && npx cdk deploy --require-approval never --outputs-file ../cdk-outputs.json
+        - cd ..
+        # 2. Get API URL from stack output
+        - |
+          API_URL=$(node -e "
+          try {
+            const o = require('./cdk-outputs.json');
+            const url = o?.HeatTransferStack?.ApiUrl || o?.ApiUrl;
+            console.log(url ? url.replace(/\/$/, '') : '');
+          } catch (e) { console.log(''); }
+          ")
+          echo "ApiUrl=$API_URL"
+          echo "$API_URL" > api_url.txt
+        # 3. Seed DynamoDB (Toledo data)
+        - |
+          export HEAT_SOURCES_TABLE=HeatSources
+          export HEAT_CONSUMERS_TABLE=HeatConsumers
+          export AWS_REGION=${AWS_REGION:-us-east-1}
+          npx ts-node src/data/seedDynamoFromToledo.ts
+        # 4. Inject API URL into frontend
+        - |
+          if [ -f api_url.txt ] && [ -n "$(cat api_url.txt)" ]; then
+            API_URL=$(cat api_url.txt)
+            sed -i.bak "s|window.HEATGRID_API_BASE_URL = \"\"|window.HEATGRID_API_BASE_URL = \"$API_URL\"|" index.html
+            echo "Injected HEATGRID_API_BASE_URL=$API_URL"
+          fi
+  artifacts:
+    baseDirectory: .
+    files:
+      - '**/*'
+  cache:
+    paths:
+      - node_modules/**/*
+      - infrastructure/node_modules/**/*

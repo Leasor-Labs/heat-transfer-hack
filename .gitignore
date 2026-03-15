@@ -1,0 +1,4 @@
+# Amplify build artifacts (do not commit)
+cdk-outputs.json
+api_url.txt
+index.html.bak
