@@ -2,9 +2,8 @@
  * HTTP server that exposes the backend API for the HeatGrid frontend.
  * Serves API routes and optionally static files (index.html, script.js, styles.css).
  * Run: npm run dev then open http://localhost:3000
- * Load .env from project root so AWS and server env vars can be set there (see .env.example).
+ * .env is loaded via the npm script preload (scripts/dotenv-preload.cjs).
  */
-import "dotenv/config";
 /// <reference path="../shared/node-path.d.ts" />
 /// <reference path="../shared/express.d.ts" />
 import path from "path";

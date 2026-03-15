@@ -1,0 +1,3 @@
+"use strict";
+// Load .env from project root. Use with: node -r ./scripts/dotenv-preload.cjs ...
+require("dotenv").config();
