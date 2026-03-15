@@ -177,8 +177,8 @@
         </div>
     </div>
     
-    <!-- Set API base URL for Amplify: point to your API Gateway URL (e.g. Lambda backend). Leave empty to use Ohio seed fallback. -->
-    <script>window.HEATGRID_API_BASE_URL = "";</script>
+    <!-- API base URL: set to your backend (e.g. http://localhost:3000 for npm run dev, or API Gateway for production). Empty = same-origin only. -->
+    <script>window.HEATGRID_API_BASE_URL = "http://localhost:3000";</script>
     <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
     <script src="script.js"></script>
 </body>
