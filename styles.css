@@ -201,6 +201,19 @@ h1 {
 
 .search-box button:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(249,115,22,0.18); }
 
+.search-banner {
+    margin-top: 10px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 0.95rem;
+}
+
+.search-banner-error {
+    color: #b91c1c;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+}
+
 .hint {
     opacity: 0.9;
     font-size: 0.9em;

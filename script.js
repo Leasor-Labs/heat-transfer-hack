@@ -163,6 +163,21 @@ function showError(elementId, message) {
     }
 }
 
+// Show or hide the red error message under the search bar (e.g. "Toledo, OH not found")
+function showSearchBanner(message, isError) {
+    const el = document.getElementById('searchBanner');
+    if (!el) return;
+    if (!message || !isError) {
+        el.style.display = 'none';
+        el.textContent = '';
+        el.className = 'search-banner';
+        return;
+    }
+    el.textContent = message;
+    el.className = 'search-banner search-banner-error';
+    el.style.display = 'block';
+}
+
 // Inline OSM fallback (no external style URL = no CORS). Use when not served from backend.
 const OSM_FALLBACK_STYLE = {
     version: 8,
@@ -294,13 +309,24 @@ async function loadData(searchQuery = '') {
             console.warn('API not available for consumers, using Ohio seed fallback');
         }
         
-        // Update global variables; use Ohio fallback when API returned no data
-        sources = (sourcesData.heatSources && sourcesData.heatSources.length) ? (sourcesData.heatSources || []) : OHIO_HEAT_SOURCES_FALLBACK;
-        consumers = (consumersData.heatConsumers && consumersData.heatConsumers.length) ? (consumersData.heatConsumers || []) : OHIO_HEAT_CONSUMERS_FALLBACK;
+        const apiSources = (sourcesData.heatSources && sourcesData.heatSources.length) ? (sourcesData.heatSources || []) : [];
+        const apiConsumers = (consumersData.heatConsumers && consumersData.heatConsumers.length) ? (consumersData.heatConsumers || []) : [];
+        const searchWasUsed = searchQuery.length > 0;
+
+        sources = searchWasUsed ? apiSources : (apiSources.length ? apiSources : OHIO_HEAT_SOURCES_FALLBACK);
+        consumers = searchWasUsed ? apiConsumers : (apiConsumers.length ? apiConsumers : OHIO_HEAT_CONSUMERS_FALLBACK);
+
+        if (searchWasUsed && sources.length === 0 && consumers.length === 0) {
+            showSearchBanner(searchQuery + ' not found', true);
+        } else {
+            showSearchBanner('', false);
+        }
         
         console.log(`Loaded ${sources.length} sources, ${consumers.length} consumers`);
         
-        // Update UI
+        // When a location is searched and found: only markers that fit the search are in sources/consumers.
+        // updateMarkers() removes all existing markers and adds only these (removing any that don't fit).
+        // Then zoom and pan so the map fits all active markers.
         if (mapInitialized) {
             updateMarkers();
             if (sourceMarkers.length > 0 || consumerMarkers.length > 0) {
@@ -311,7 +337,7 @@ async function loadData(searchQuery = '') {
         updateMarkerCounts();
         
         // Show message if no data
-        if (sources.length === 0 && consumers.length === 0) {
+        if (sources.length === 0 && consumers.length === 0 && !searchWasUsed) {
             showError('rankingsBody', 'No heat sources or consumers found. Try a different search.');
         }
         
@@ -319,6 +345,7 @@ async function loadData(searchQuery = '') {
         console.error('Error loading data:', error);
         sources = OHIO_HEAT_SOURCES_FALLBACK;
         consumers = OHIO_HEAT_CONSUMERS_FALLBACK;
+        showSearchBanner('', false);
         if (mapInitialized) updateMarkers();
         updateSelectors();
         updateMarkerCounts();
@@ -326,14 +353,14 @@ async function loadData(searchQuery = '') {
     }
 }
 
-// Update map markers
+// Update map markers: remove all existing markers, then add only the current sources/consumers
+// (so after a search, only markers that fit the search query remain)
 function updateMarkers() {
     if (!map || !mapInitialized) {
         console.warn('Map not ready, skipping markers');
         return;
     }
     
-    // Clear existing markers
     sourceMarkers.forEach(m => m.marker.remove());
     consumerMarkers.forEach(m => m.marker.remove());
     sourceMarkers = [];
@@ -453,14 +480,21 @@ function updateMarkerCounts() {
 
 // Setup event listeners
 function setupEventListeners() {
-    // Search button
+    // Search button: blank query does nothing and clears any markers; non-blank runs search
     const searchBtn = document.getElementById('searchBtn');
     if (searchBtn) {
         searchBtn.addEventListener('click', async () => {
-            const query = document.getElementById('locationSearch').value;
-            if (query) {
-                await loadData(query);
+            const query = (document.getElementById('locationSearch').value || '').trim();
+            if (!query) {
+                sources = [];
+                consumers = [];
+                showSearchBanner('', false);
+                if (mapInitialized) updateMarkers();
+                updateSelectors();
+                updateMarkerCounts();
+                return;
             }
+            await loadData(query);
         });
     }
     
@@ -618,8 +652,10 @@ function highlightSelected() {
     }
 }
 
-// Fit map to show all markers (zoom animation: 2 seconds)
+// Fit map to show all active markers (zoom and pan with 2s animation)
 const FIT_BOUNDS_DURATION_MS = 2000;
+const FIT_BOUNDS_PADDING = 50;
+const SINGLE_MARKER_ZOOM = 13;
 
 function fitMarkersToBounds() {
     if (!map || !mapInitialized) return;
@@ -629,16 +665,26 @@ function fitMarkersToBounds() {
     }
     
     const bounds = new maplibregl.LngLatBounds();
+    sourceMarkers.forEach(({ marker }) => bounds.extend(marker.getLngLat()));
+    consumerMarkers.forEach(({ marker }) => bounds.extend(marker.getLngLat()));
     
-    sourceMarkers.forEach(({ marker }) => {
-        bounds.extend(marker.getLngLat());
-    });
+    const totalMarkers = sourceMarkers.length + consumerMarkers.length;
+    const singleMarker = totalMarkers === 1;
+    const center = bounds.getCenter();
     
-    consumerMarkers.forEach(({ marker }) => {
-        bounds.extend(marker.getLngLat());
-    });
-    
-    map.fitBounds(bounds, { padding: 50, duration: FIT_BOUNDS_DURATION_MS, maxZoom: 14 });
+    if (singleMarker) {
+        map.flyTo({
+            center: [center.lng, center.lat],
+            zoom: SINGLE_MARKER_ZOOM,
+            duration: FIT_BOUNDS_DURATION_MS
+        });
+    } else {
+        map.fitBounds(bounds, {
+            padding: FIT_BOUNDS_PADDING,
+            duration: FIT_BOUNDS_DURATION_MS,
+            maxZoom: 14
+        });
+    }
 }
 
 // Calculate opportunity for selected source and consumer
