@@ -792,6 +792,33 @@ function updateRangeCircleAndHighlights() {
         }
     }
 
+    // #region agent log: range-circle-state
+    fetch('http://127.0.0.1:7528/ingest/59cacce0-7747-4658-a89b-976b0f7d76a2', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Debug-Session-Id': '4c8555'
+        },
+        body: JSON.stringify({
+            sessionId: '4c8555',
+            runId: 'pre-fix',
+            hypothesisId: 'H1',
+            location: 'script.js:updateRangeCircleAndHighlights',
+            message: 'Range circle computed',
+            data: {
+                selectedSourceId,
+                selectedConsumerId,
+                centerLat,
+                centerLng,
+                targetIsSource,
+                inRangeOpposingConsumerIds,
+                inRangeOpposingSourceIds
+            },
+            timestamp: Date.now()
+        })
+    }).catch(() => {});
+    // #endregion agent log: range-circle-state
+
     highlightSelected();
 
     // Compile opposing heat types into a list and fetch Best Score rankings.
@@ -821,6 +848,33 @@ function updateRangeCircleAndHighlights() {
 
 // Load ranked opportunities for in-range opposing pairs (Best Score formula). Populates rankedInRangeOpportunities.
 async function loadRankedInRangeOpportunities(payload) {
+    // #region agent log: load-ranked-in-range-entry
+    fetch('http://127.0.0.1:7528/ingest/59cacce0-7747-4658-a89b-976b0f7d76a2', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Debug-Session-Id': '4c8555'
+        },
+        body: JSON.stringify({
+            sessionId: '4c8555',
+            runId: 'pre-fix',
+            hypothesisId: 'H2',
+            location: 'script.js:loadRankedInRangeOpportunities',
+            message: 'Called loadRankedInRangeOpportunities',
+            data: {
+                hasPayload: !!payload,
+                keys: payload ? Object.keys(payload) : [],
+                payload,
+                selectedSourceId,
+                selectedConsumerId,
+                inRangeOpposingConsumerCount: inRangeOpposingConsumerIds.length,
+                inRangeOpposingSourceCount: inRangeOpposingSourceIds.length
+            },
+            timestamp: Date.now()
+        })
+    }).catch(() => {});
+    // #endregion agent log: load-ranked-in-range-entry
+
     if (!payload) {
         rankedInRangeOpportunities = [];
         displayNearbyRankings();
@@ -844,6 +898,32 @@ async function loadRankedInRangeOpportunities(payload) {
         }
         const data = await res.json();
         rankedInRangeOpportunities = data.rankings || [];
+        // #region agent log: load-ranked-in-range-success
+        fetch('http://127.0.0.1:7528/ingest/59cacce0-7747-4658-a89b-976b0f7d76a2', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Debug-Session-Id': '4c8555'
+            },
+            body: JSON.stringify({
+                sessionId: '4c8555',
+                runId: 'pre-fix',
+                hypothesisId: 'H3',
+                location: 'script.js:loadRankedInRangeOpportunities',
+                message: 'Received rankedInRangeOpportunities from API',
+                data: {
+                    count: rankedInRangeOpportunities.length,
+                    firstIds: rankedInRangeOpportunities.slice(0, 3).map(r => ({
+                        rank: r.rank,
+                        sourceId: r.opportunity?.sourceId,
+                        consumerId: r.opportunity?.consumerId,
+                        bestScore: r.bestScore
+                    }))
+                },
+                timestamp: Date.now()
+            })
+        }).catch(() => {});
+        // #endregion agent log: load-ranked-in-range-success
         displayNearbyRankings();
     } catch (e) {
         console.warn('Failed to load ranked opportunities in range', e);
@@ -864,6 +944,33 @@ function displayNearbyRankings() {
     const hasConsumer = !!selectedConsumerId;
     const showConsumers = hasSource && (inRangeOpposingConsumerIds.length > 0 || rankedInRangeOpportunities.length > 0);
     const showSources = hasConsumer && (inRangeOpposingSourceIds.length > 0 || rankedInRangeOpportunities.length > 0);
+
+    // #region agent log: display-nearby-rankings
+    fetch('http://127.0.0.1:7528/ingest/59cacce0-7747-4658-a89b-976b0f7d76a2', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Debug-Session-Id': '4c8555'
+        },
+        body: JSON.stringify({
+            sessionId: '4c8555',
+            runId: 'pre-fix',
+            hypothesisId: 'H4',
+            location: 'script.js:displayNearbyRankings',
+            message: 'Rendering Nearby Locations widget',
+            data: {
+                selectedSourceId,
+                selectedConsumerId,
+                hasSource,
+                hasConsumer,
+                inRangeOpposingConsumerCount: inRangeOpposingConsumerIds.length,
+                inRangeOpposingSourceCount: inRangeOpposingSourceIds.length,
+                rankedCount: rankedInRangeOpportunities ? rankedInRangeOpportunities.length : 0
+            },
+            timestamp: Date.now()
+        })
+    }).catch(() => {});
+    // #endregion agent log: display-nearby-rankings
 
     if (!hasSource && !hasConsumer) {
         widget.style.display = 'none';
