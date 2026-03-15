@@ -1,0 +1,226 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: HeatGrid API - API Gateway, Lambda, DynamoDB (plain CloudFormation, no SAM)
+
+Parameters:
+  Stage:
+    Type: String
+    Default: dev
+    Description: Stage name for the API
+  LambdaSourceBucket:
+    Type: String
+    Description: S3 bucket containing the Lambda deployment package (set by build)
+  LambdaSourceKey:
+    Type: String
+    Description: S3 key of the Lambda zip (set by build)
+
+Resources:
+  HeatSourcesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: HeatSources
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: industry
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: industry-index
+          KeySchema:
+            - AttributeName: industry
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+
+  HeatConsumersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: HeatConsumers
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: category
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: category-index
+          KeySchema:
+            - AttributeName: category
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+
+  ApiFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+  ApiFunctionRolePolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: DynamoDBAccess
+      Roles:
+        - !Ref ApiFunctionRole
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - dynamodb:GetItem
+              - dynamodb:PutItem
+              - dynamodb:UpdateItem
+              - dynamodb:DeleteItem
+              - dynamodb:Query
+              - dynamodb:Scan
+              - dynamodb:BatchGetItem
+              - dynamodb:BatchWriteItem
+            Resource:
+              - !GetAtt HeatSourcesTable.Arn
+              - !Sub "${HeatSourcesTable.Arn}/index/*"
+              - !GetAtt HeatConsumersTable.Arn
+              - !Sub "${HeatConsumersTable.Arn}/index/*"
+
+  ApiFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: index.handler
+      Runtime: nodejs20.x
+      Timeout: 30
+      MemorySize: 256
+      Role: !GetAtt ApiFunctionRole.Arn
+      Code:
+        S3Bucket: !Ref LambdaSourceBucket
+        S3Key: !Ref LambdaSourceKey
+      Environment:
+        Variables:
+          HEAT_SOURCES_TABLE: !Ref HeatSourcesTable
+          HEAT_CONSUMERS_TABLE: !Ref HeatConsumersTable
+          AWS_NODEJS_CONNECTION_REUSE_ENABLED: "1"
+
+  HeatGridApi:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: !Sub heatgrid-api-${Stage}
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+
+  ApiResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref HeatGridApi
+      ParentId: !GetAtt HeatGridApi.RootResourceId
+      PathPart: api
+
+  ApiProxyResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref HeatGridApi
+      ParentId: !Ref ApiResource
+      PathPart: "{proxy+}"
+
+  ApiMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref HeatGridApi
+      ResourceId: !Ref ApiProxyResource
+      HttpMethod: ANY
+      AuthorizationType: NONE
+      RequestParameters:
+        method.request.path.proxy: true
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ApiFunction.Arn}/invocations"
+      MethodResponses: []
+    DependsOn: ApiFunctionLambdaPermission
+
+  ApiMethodOptions:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref HeatGridApi
+      ResourceId: !Ref ApiProxyResource
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+      IntegrationResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: "'Content-Type,x-api-key'"
+            method.response.header.Access-Control-Allow-Methods: "'GET,POST,OPTIONS'"
+            method.response.header.Access-Control-Allow-Origin: "'*'"
+          ResponseTemplates:
+            application/json: ""
+      MethodResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+
+  ApiDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn: ApiMethod
+    Properties:
+      RestApiId: !Ref HeatGridApi
+      StageName: !Ref Stage
+
+  ApiFunctionLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ApiFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HeatGridApi}/*"
+
+  HeatGridApiKey:
+    Type: AWS::ApiGateway::ApiKey
+    Properties:
+      Name: !Sub heatgrid-api-key-${Stage}
+      Description: Optional API key for HeatGrid API (not required by default)
+      Enabled: true
+
+  HeatGridUsagePlan:
+    Type: AWS::ApiGateway::UsagePlan
+    Properties:
+      UsagePlanName: !Sub heatgrid-usage-plan-${Stage}
+      Description: Usage plan for HeatGrid API
+
+  HeatGridUsagePlanKey:
+    Type: AWS::ApiGateway::UsagePlanKey
+    DependsOn: HeatGridUsagePlan
+    Properties:
+      KeyId: !Ref HeatGridApiKey
+      KeyType: API_KEY
+      UsagePlanId: !Ref HeatGridUsagePlan
+
+Outputs:
+  ApiUrl:
+    Description: API Gateway base URL (set HEATGRID_API_BASE_URL in Amplify to this value)
+    Value: !Sub "https://${HeatGridApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}"
+    Export:
+      Name: !Sub "${AWS::StackName}-ApiUrl"
+  HeatSourcesTableName:
+    Value: !Ref HeatSourcesTable
+  HeatConsumersTableName:
+    Value: !Ref HeatConsumersTable
+  ApiKeyId:
+    Description: API Key ID (optional)
+    Value: !Ref HeatGridApiKey

@@ -5,14 +5,21 @@ frontend:
       commands:
         - npm ci
         - npm run build:lambda
-        - pip install --user aws-sam-cli
-        - sam build
     build:
       commands:
+        - |
+          ARTIFACT_KEY="heatgrid/builds/${CODEBUILD_BUILD_ID:-manual}/build.zip"
+          cd build && zip -r ../build.zip . && cd ..
+          aws s3 cp build.zip "s3://${LAMBDA_ARTIFACTS_BUCKET}/${ARTIFACT_KEY}"
+          echo "LAMBDA_ARTIFACT_KEY=${ARTIFACT_KEY}" >> env.txt
         - node scripts/inject-api-url.js
     postBuild:
       commands:
-        - sam deploy --no-confirm-changeset --no-fail-on-empty-changeset --resolve-s3 --stack-name $SAM_STACK_NAME --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM --region $AWS_REGION --parameter-overrides "Stage=${SAM_STAGE:-dev}"
+        - |
+          source env.txt 2>/dev/null || true
+          aws cloudformation deploy --template-file template-cfn.yaml --stack-name $SAM_STACK_NAME \
+            --parameter-overrides "Stage=${SAM_STAGE:-dev}" "LambdaSourceBucket=${LAMBDA_ARTIFACTS_BUCKET}" "LambdaSourceKey=${LAMBDA_ARTIFACT_KEY:-heatgrid/builds/manual/build.zip}" \
+            --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM --region $AWS_REGION --no-fail-on-empty-changeset
   artifacts:
     baseDirectory: .
     files:
