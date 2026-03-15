@@ -7,8 +7,8 @@
  */
 import { PutCommand } from "@aws-sdk/lib-dynamodb";
 import { docClient, HEAT_SOURCES_TABLE, HEAT_CONSUMERS_TABLE } from "../api/dynamo";
-import { HEAT_SOURCES_OHIO } from "./heat-sources-ohio";
-import { HEAT_CONSUMERS_OHIO } from "./heat-consumers-ohio";
+import { HEAT_SOURCES_OHIO } from "./heat-sources";
+import { HEAT_CONSUMERS_OHIO } from "./heat-consumers";
 
 declare const process: { exit(code: number): never };
 declare const require: { (id: string): unknown; main?: unknown };
