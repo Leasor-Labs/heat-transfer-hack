@@ -67,6 +67,11 @@ export type RefreshResult = {
  * then write them to DynamoDB. No-op if Location Service or DynamoDB tables are not configured.
  */
 export async function refreshDynamoFromLocationService(): Promise<RefreshResult> {
+  // #region agent log
+  const locConfigured = isLocationServiceConfigured();
+  fetch('http://127.0.0.1:7528/ingest/59cacce0-7747-4658-a89b-976b0f7d76a2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'e1f167'},body:JSON.stringify({sessionId:'e1f167',location:'build-seed-from-location-service.ts:69',message:'refresh entry',data:{isLocationServiceConfigured:locConfigured,hasSourcesTable:!!HEAT_SOURCES_TABLE,hasConsumersTable:!!HEAT_CONSUMERS_TABLE},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
+  fetch('http://127.0.0.1:7528/ingest/59cacce0-7747-4658-a89b-976b0f7d76a2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'e1f167'},body:JSON.stringify({sessionId:'e1f167',location:'build-seed-from-location-service.ts:70',message:'refresh entry tables',data:{HEAT_SOURCES_TABLE:HEAT_SOURCES_TABLE||'(empty)',HEAT_CONSUMERS_TABLE:HEAT_CONSUMERS_TABLE||'(empty)'},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
+  // #endregion
   if (!isLocationServiceConfigured()) {
     return { sourcesWritten: 0, consumersWritten: 0 };
   }
@@ -74,26 +79,45 @@ export async function refreshDynamoFromLocationService(): Promise<RefreshResult>
     return { sourcesWritten: 0, consumersWritten: 0 };
   }
 
-  const [sources, consumers] = await Promise.all([
-    buildHeatSourcesFromLocationService([...HEAT_SOURCE_KEYWORDS]),
-    buildHeatConsumersFromLocationService([...HEAT_CONSUMER_KEYWORDS]),
-  ]);
-
-  for (const item of sources) {
-    await docClient.send(
-      new PutCommand({
-        TableName: HEAT_SOURCES_TABLE,
-        Item: item as Record<string, unknown>,
-      })
-    );
+  let sources: HeatSource[];
+  let consumers: HeatConsumer[];
+  try {
+    [sources, consumers] = await Promise.all([
+      buildHeatSourcesFromLocationService([...HEAT_SOURCE_KEYWORDS]),
+      buildHeatConsumersFromLocationService([...HEAT_CONSUMER_KEYWORDS]),
+    ]);
+  } catch (buildErr) {
+    // #region agent log
+    fetch('http://127.0.0.1:7528/ingest/59cacce0-7747-4658-a89b-976b0f7d76a2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'e1f167'},body:JSON.stringify({sessionId:'e1f167',location:'build-seed-from-location-service.ts:86',message:'build failed',data:{error:String((buildErr as Error)?.message||buildErr)},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
+    // #endregion
+    throw buildErr;
   }
-  for (const item of consumers) {
-    await docClient.send(
-      new PutCommand({
-        TableName: HEAT_CONSUMERS_TABLE,
-        Item: item as Record<string, unknown>,
-      })
-    );
+  // #region agent log
+  fetch('http://127.0.0.1:7528/ingest/59cacce0-7747-4658-a89b-976b0f7d76a2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'e1f167'},body:JSON.stringify({sessionId:'e1f167',location:'build-seed-from-location-service.ts:90',message:'build result',data:{sourcesCount:sources.length,consumersCount:consumers.length},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
+  // #endregion
+
+  try {
+    for (const item of sources) {
+      await docClient.send(
+        new PutCommand({
+          TableName: HEAT_SOURCES_TABLE,
+          Item: item as Record<string, unknown>,
+        })
+      );
+    }
+    for (const item of consumers) {
+      await docClient.send(
+        new PutCommand({
+          TableName: HEAT_CONSUMERS_TABLE,
+          Item: item as Record<string, unknown>,
+        })
+      );
+    }
+  } catch (writeErr) {
+    // #region agent log
+    fetch('http://127.0.0.1:7528/ingest/59cacce0-7747-4658-a89b-976b0f7d76a2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'e1f167'},body:JSON.stringify({sessionId:'e1f167',location:'build-seed-from-location-service.ts:118',message:'DynamoDB write failed',data:{error:String((writeErr as Error)?.message||writeErr)},timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
+    // #endregion
+    throw writeErr;
   }
 
   return { sourcesWritten: sources.length, consumersWritten: consumers.length };

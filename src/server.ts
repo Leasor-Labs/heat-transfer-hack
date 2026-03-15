@@ -42,9 +42,21 @@ app.get("/api/heat-sources", async (req, res) => {
   try {
     const locationSearchQuery = req.query.locationSearchQuery as string | undefined;
     if (locationSearchQuery?.trim()) {
-      refreshDynamoFromLocationService().catch((err) =>
-        console.error("Refresh seed from location failed", err)
-      );
+      // #region agent log
+      fetch('http://127.0.0.1:7528/ingest/59cacce0-7747-4658-a89b-976b0f7d76a2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'e1f167'},body:JSON.stringify({sessionId:'e1f167',location:'server.ts:46',message:'trigger refresh',data:{locationSearchQuery:locationSearchQuery?.trim()},timestamp:Date.now(),hypothesisId:'H5'})}).catch(()=>{});
+      // #endregion
+      refreshDynamoFromLocationService()
+        .then((result) => {
+          // #region agent log
+          fetch('http://127.0.0.1:7528/ingest/59cacce0-7747-4658-a89b-976b0f7d76a2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'e1f167'},body:JSON.stringify({sessionId:'e1f167',location:'server.ts:52',message:'refresh completed',data:result,timestamp:Date.now(),hypothesisId:'H5'})}).catch(()=>{});
+          // #endregion
+        })
+        .catch((err) => {
+          // #region agent log
+          fetch('http://127.0.0.1:7528/ingest/59cacce0-7747-4658-a89b-976b0f7d76a2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'e1f167'},body:JSON.stringify({sessionId:'e1f167',location:'server.ts:56',message:'refresh failed',data:{error:String(err?.message||err)},timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
+          // #endregion
+          console.error("Refresh seed from location failed", err);
+        });
     }
     const data = await handleGetHeatSources({ locationSearchQuery });
     res.json(data);
