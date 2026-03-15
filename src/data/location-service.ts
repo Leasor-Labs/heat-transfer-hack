@@ -37,12 +37,25 @@ export function isLocationServiceConfigured(): boolean {
 }
 
 /**
+ * Bounding box for City of Toledo, Ohio.
+ * Format: [southwest_longitude, southwest_latitude, northeast_longitude, northeast_latitude].
+ */
+export const TOLEDO_OHIO_BBOX: [number, number, number, number] = [
+  -83.7, 41.55, -83.45, 41.75,
+];
+
+/**
  * Search for places by text (e.g. "industrial facility Ohio").
  * Returns array of place labels and coordinates.
+ * When filterBBox is provided, results are restricted to that area; do not pass biasPosition (AWS forbids both).
  */
 export async function searchPlacesByText(
   text: string,
-  options?: { maxResults?: number; biasPosition?: [number, number] }
+  options?: {
+    maxResults?: number;
+    biasPosition?: [number, number];
+    filterBBox?: [number, number, number, number];
+  }
 ): Promise<PlaceResult[]> {
   if (!isLocationServiceConfigured()) {
     return [];
@@ -56,7 +69,9 @@ export async function searchPlacesByText(
       IndexName: getPlaceIndexName(),
       Text: text,
       MaxResults: options?.maxResults ?? 10,
-      BiasPosition: options?.biasPosition,
+      ...(options?.filterBBox
+        ? { FilterBBox: options.filterBBox }
+        : { BiasPosition: options?.biasPosition }),
     });
     const response = (await client.send(command)) as {
       Results?: Array<{ Place?: { PlaceId?: string; Label?: string; Geometry?: { Point?: [number, number] } } }>;
@@ -116,4 +131,36 @@ export async function searchPlaceByPosition(
 export async function geocodeAddress(text: string): Promise<[number, number] | null> {
   const results = await searchPlacesByText(text, { maxResults: 1 });
   return results.length > 0 ? results[0].position : null;
+}
+
+/** Place result plus the keyword that matched it (for category/industry). */
+export type PlaceResultWithKeyword = { place: PlaceResult; keyword: string };
+
+/**
+ * Search for places by multiple keywords, aggregate and dedupe by placeId.
+ * Returns each place with the keyword that found it. Used by heat-sources and heat-consumers.
+ */
+export async function searchPlacesByKeywords(
+  keywords: readonly string[],
+  options?: {
+    maxResultsPerKeyword?: number;
+    filterBBox?: [number, number, number, number];
+  }
+): Promise<PlaceResultWithKeyword[]> {
+  if (!isLocationServiceConfigured() || keywords.length === 0) return [];
+  const seen = new Set<string>();
+  const results: PlaceResultWithKeyword[] = [];
+  const maxResults = options?.maxResultsPerKeyword ?? 5;
+  for (const keyword of keywords) {
+    const places = await searchPlacesByText(keyword, {
+      maxResults,
+      filterBBox: options?.filterBBox,
+    });
+    for (const p of places) {
+      if (seen.has(p.placeId)) continue;
+      seen.add(p.placeId);
+      results.push({ place: p, keyword });
+    }
+  }
+  return results;
 }

@@ -27,10 +27,102 @@ let sourceMarkers = [];
 let consumerMarkers = [];
 let selectedSourceId = null;
 let selectedConsumerId = null;
+let lastOpenSourcePopup = null;
+let lastOpenConsumerPopup = null;
 let currentRouteLayer = null;
 let currentOpportunity = null;
 let allRankings = [];
 let mapInitialized = false;
+
+// All tags from database (industries + categories) for search autocomplete
+let allTags = { industries: [], categories: [] };
+
+// Location suggestions for autocomplete: city, region, or address (e.g. Toledo, OH)
+const LOCATION_SUGGESTIONS_STATIC = [
+    'Toledo, OH', 'Cleveland, OH', 'Columbus, OH', 'Cincinnati, OH', 'Akron, OH',
+    'Ohio', 'Toledo', 'Cleveland', 'Columbus', 'Cincinnati', 'Akron',
+    'Dayton, OH', 'Youngstown, OH', 'Canton, OH', 'Parma, OH'
+];
+
+// Autocomplete: city, region, or address only (no industry/category/site)
+const SUGGESTION_TYPE = { location: 'location' };
+
+function getLocationSuggestions(query) {
+    const q = (query || '').trim().toLowerCase();
+    const seen = new Set();
+    const result = [];
+
+    function addLocation(value) {
+        const v = value && String(value).trim();
+        if (!v || seen.has(v.toLowerCase())) return;
+        seen.add(v.toLowerCase());
+        result.push({ value: v, type: SUGGESTION_TYPE.location });
+    }
+
+    LOCATION_SUGGESTIONS_STATIC.forEach(addLocation);
+    sources.forEach(s => {
+        if (s.city) addLocation(s.city + (s.region ? ', ' + s.region : ''));
+    });
+    consumers.forEach(c => {
+        if (c.city) addLocation(c.city + (c.region ? ', ' + c.region : ''));
+    });
+
+    let list = result;
+    if (q) list = result.filter(({ value }) => value.toLowerCase().includes(q));
+    return list.slice(0, 20);
+}
+
+function showAutocomplete(query) {
+    const listEl = document.getElementById('autocompleteList');
+    if (!listEl) return;
+    const suggestions = getLocationSuggestions(query);
+    listEl.innerHTML = suggestions.map((s, i) => {
+        const safeValue = (s.value || '').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        return `<li class="autocomplete-item" data-index="${i}" data-value="${safeValue}" data-type="location" role="option">
+            <span class="autocomplete-item-value">${safeValue}</span>
+        </li>`;
+    }).join('');
+    listEl.setAttribute('aria-hidden', suggestions.length === 0 ? 'true' : 'false');
+    if (suggestions.length > 0) {
+        listEl.style.display = 'block';
+        const items = listEl.querySelectorAll('.autocomplete-item');
+        items.forEach((el, i) => {
+            if (i === 0) el.classList.add('active');
+            el.addEventListener('click', () => {
+                const input = document.getElementById('locationSearch');
+                if (input) {
+                    input.value = el.getAttribute('data-value');
+                    listEl.setAttribute('aria-hidden', 'true');
+                    listEl.style.display = 'none';
+                    document.getElementById('searchBtn')?.click();
+                }
+            });
+        });
+    } else {
+        listEl.style.display = 'none';
+    }
+}
+
+function hideAutocomplete() {
+    const listEl = document.getElementById('autocompleteList');
+    if (listEl) {
+        listEl.setAttribute('aria-hidden', 'true');
+        listEl.style.display = 'none';
+    }
+}
+
+// Fetch all tags (industries + categories) from API for search autocomplete
+async function fetchTags() {
+    try {
+        const res = await fetch(`${API_BASE_URL}/api/tags`);
+        if (res.ok) {
+            const data = await res.json();
+            allTags = { industries: data.industries || [], categories: data.categories || [] };
+        }
+    } catch (e) {
+        console.warn('Could not fetch tags for search:', e);
+    }
+}
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', async () => {
@@ -39,6 +131,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Show loading states
     showLoading('rankingsBody', 'Loading heat sources...');
     document.getElementById('markerCounts').innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading...';
+    
+    // Fetch tags so search has access to all database tags
+    await fetchTags();
     
     // Initialize map with fallback
     await initMap();
@@ -49,8 +144,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Setup event listeners
     setupEventListeners();
     
-    // Load rankings
-    await loadRankings();
+    // Load rankings - removed to load only after calculate
 });
 
 // Show loading state helper
@@ -69,6 +163,21 @@ function showError(elementId, message) {
             <i class="fas fa-exclamation-triangle"></i> ${message}
         </td></tr>`;
     }
+}
+
+// Show or hide the red error message under the search bar (e.g. "Toledo, OH not found")
+function showSearchBanner(message, isError) {
+    const el = document.getElementById('searchBanner');
+    if (!el) return;
+    if (!message || !isError) {
+        el.style.display = 'none';
+        el.textContent = '';
+        el.className = 'search-banner';
+        return;
+    }
+    el.textContent = message;
+    el.className = 'search-banner search-banner-error';
+    el.style.display = 'block';
 }
 
 // Inline OSM fallback (no external style URL = no CORS). Use when not served from backend.
@@ -137,19 +246,10 @@ async function initMap() {
         map.on('load', () => {
             mapInitialized = true;
             map.resize();
-            const usingAws = typeof style === 'string' && style.includes('amazonaws.com');
-            new maplibregl.Popup({ closeOnClick: true })
-                .setLngLat([-82.5, 40.0])
-                .setHTML(`
-                    <div style="padding: 10px;">
-                        <h3 style="margin: 0 0 10px 0;">🔥 HeatGrid</h3>
-                        <p>Welcome! Select a source and consumer to calculate heat recovery opportunities.</p>
-                        <p style="font-size: 0.9em; color: #666;">
-                            ${usingAws ? '✓ Using AWS Location Service' : '✓ Map ready'}
-                        </p>
-                    </div>
-                `)
-                .addTo(map);
+            if (sources.length > 0 || consumers.length > 0) {
+                updateMarkers();
+                fitMarkersToBounds();
+            }
         });
 
         map.on('error', (e) => {
@@ -211,21 +311,35 @@ async function loadData(searchQuery = '') {
             console.warn('API not available for consumers, using Ohio seed fallback');
         }
         
-        // Update global variables; use Ohio fallback when API returned no data
-        sources = (sourcesData.heatSources && sourcesData.heatSources.length) ? (sourcesData.heatSources || []) : OHIO_HEAT_SOURCES_FALLBACK;
-        consumers = (consumersData.heatConsumers && consumersData.heatConsumers.length) ? (consumersData.heatConsumers || []) : OHIO_HEAT_CONSUMERS_FALLBACK;
+        const apiSources = (sourcesData.heatSources && sourcesData.heatSources.length) ? (sourcesData.heatSources || []) : [];
+        const apiConsumers = (consumersData.heatConsumers && consumersData.heatConsumers.length) ? (consumersData.heatConsumers || []) : [];
+        const searchWasUsed = searchQuery.length > 0;
+
+        sources = searchWasUsed ? apiSources : (apiSources.length ? apiSources : OHIO_HEAT_SOURCES_FALLBACK);
+        consumers = searchWasUsed ? apiConsumers : (apiConsumers.length ? apiConsumers : OHIO_HEAT_CONSUMERS_FALLBACK);
+
+        if (searchWasUsed && sources.length === 0 && consumers.length === 0) {
+            showSearchBanner(searchQuery + ' not found', true);
+        } else {
+            showSearchBanner('', false);
+        }
         
         console.log(`Loaded ${sources.length} sources, ${consumers.length} consumers`);
         
-        // Update UI
+        // When a location is searched and found: only markers that fit the search are in sources/consumers.
+        // updateMarkers() removes all existing markers and adds only these (removing any that don't fit).
+        // Then zoom and pan so the map fits all active markers.
         if (mapInitialized) {
             updateMarkers();
+            if (sourceMarkers.length > 0 || consumerMarkers.length > 0) {
+                fitMarkersToBounds();
+            }
         }
         updateSelectors();
         updateMarkerCounts();
         
         // Show message if no data
-        if (sources.length === 0 && consumers.length === 0) {
+        if (sources.length === 0 && consumers.length === 0 && !searchWasUsed) {
             showError('rankingsBody', 'No heat sources or consumers found. Try a different search.');
         }
         
@@ -233,6 +347,7 @@ async function loadData(searchQuery = '') {
         console.error('Error loading data:', error);
         sources = OHIO_HEAT_SOURCES_FALLBACK;
         consumers = OHIO_HEAT_CONSUMERS_FALLBACK;
+        showSearchBanner('', false);
         if (mapInitialized) updateMarkers();
         updateSelectors();
         updateMarkerCounts();
@@ -240,14 +355,14 @@ async function loadData(searchQuery = '') {
     }
 }
 
-// Update map markers
+// Update map markers: remove all existing markers, then add only the current sources/consumers
+// (so after a search, only markers that fit the search query remain)
 function updateMarkers() {
     if (!map || !mapInitialized) {
         console.warn('Map not ready, skipping markers');
         return;
     }
     
-    // Clear existing markers
     sourceMarkers.forEach(m => m.marker.remove());
     consumerMarkers.forEach(m => m.marker.remove());
     sourceMarkers = [];
@@ -255,63 +370,65 @@ function updateMarkers() {
     
     // Add source markers (red)
     sources.forEach(source => {
-        // Validate coordinates
         if (!source.longitude || !source.latitude) {
             console.warn('Source missing coordinates:', source);
             return;
         }
-        
         const popupContent = `
-            <div style="padding: 10px; min-width: 200px;">
-                <h3 style="margin: 0 0 10px 0; color: #ff4d4d;">🏭 ${source.name || 'Unnamed Source'}</h3>
-                <p><strong>Industry:</strong> ${source.industry || 'Industrial'}</p>
-                <p><strong>Waste Heat:</strong> ${(source.estimatedWasteHeatMWhPerYear / 1000).toFixed(1)} GWh/year</p>
-                <p><strong>Recoverable:</strong> ${(source.recoverableHeatMWhPerYear / 1000).toFixed(1)} GWh/year</p>
-                <p><strong>Temperature:</strong> ${source.temperatureClass || 'medium'}</p>
+                <div style="padding: 10px; min-width: 200px;">
+                <h3 style="margin: 0 0 10px 0; color: #ff0000;">🏭 ${source.name || 'Unnamed Source'}</h3>
+                <p style='color:#000;'><strong>Industry:</strong> ${source.industry || 'Industrial'}</p>
+                <p style='color:#000;'><strong>Waste Heat:</strong> ${(source.estimatedWasteHeatMWhPerYear / 1000).toFixed(1)} GWh/year</p>
+                <p style='color:#000;'><strong>Recoverable:</strong> ${(source.recoverableHeatMWhPerYear / 1000).toFixed(1)} GWh/year</p>
+                <p style='color:#000;'><strong>Temperature:</strong> ${source.temperatureClass || 'medium'}</p>
                 <button onclick="window.selectSource('${source.id}')" 
-                    style="width:100%; padding:8px; background:#ff4d4d; color:white; border:none; border-radius:5px; cursor:pointer; margin-top:10px;">
+                    style="width:100%; padding:8px; background:#ff0000; color:white; border:none; border-radius:5px; cursor:pointer; margin-top:10px;">
                     <i class="fas fa-check"></i> Select This Source
                 </button>
             </div>
         `;
-        
         const popup = new maplibregl.Popup({ offset: 25 }).setHTML(popupContent);
-        
-        const marker = new maplibregl.Marker({ color: '#ff4d4d' })
+        popup.on('open', () => {
+            if (lastOpenSourcePopup && lastOpenSourcePopup !== popup) {
+                lastOpenSourcePopup.remove();
+            }
+            lastOpenSourcePopup = popup;
+        });
+        const marker = new maplibregl.Marker({ color: '#ff0000' })
             .setLngLat([source.longitude, source.latitude])
             .setPopup(popup)
             .addTo(map);
-        
         sourceMarkers.push({ marker, id: source.id, data: source });
     });
     
     // Add consumer markers (blue)
     consumers.forEach(consumer => {
-        // Validate coordinates
         if (!consumer.longitude || !consumer.latitude) {
             console.warn('Consumer missing coordinates:', consumer);
             return;
         }
-        
         const popupContent = `
-            <div style="padding: 10px; min-width: 200px;">
-                <h3 style="margin: 0 0 10px 0; color: #4d79ff;">🏢 ${consumer.name || 'Unnamed Consumer'}</h3>
-                <p><strong>Category:</strong> ${consumer.category || 'Building'}</p>
-                <p><strong>Heat Demand:</strong> ${(consumer.annualHeatDemandMWh / 1000).toFixed(1)} GWh/year</p>
+                <div style="padding: 10px; min-width: 200px;">
+                <h3 style="margin: 0 0 10px 0; color: #007bff;">🏢 ${consumer.name || 'Unnamed Consumer'}</h3>
+                <p style='color:#000;'><strong>Category:</strong> ${consumer.category || 'Building'}</p>
+                <p style='color:#000;'><strong>Heat Demand:</strong> ${(consumer.annualHeatDemandMWh / 1000).toFixed(1)} GWh/year</p>
                 <button onclick="window.selectConsumer('${consumer.id}')" 
-                    style="width:100%; padding:8px; background:#4d79ff; color:white; border:none; border-radius:5px; cursor:pointer; margin-top:10px;">
+                    style="width:100%; padding:8px; background:#007bff; color:white; border:none; border-radius:5px; cursor:pointer; margin-top:10px;">
                     <i class="fas fa-check"></i> Select This Consumer
                 </button>
             </div>
         `;
-        
         const popup = new maplibregl.Popup({ offset: 25 }).setHTML(popupContent);
-        
-        const marker = new maplibregl.Marker({ color: '#4d79ff' })
+        popup.on('open', () => {
+            if (lastOpenConsumerPopup && lastOpenConsumerPopup !== popup) {
+                lastOpenConsumerPopup.remove();
+            }
+            lastOpenConsumerPopup = popup;
+        });
+        const marker = new maplibregl.Marker({ color: '#007bff' })
             .setLngLat([consumer.longitude, consumer.latitude])
             .setPopup(popup)
             .addTo(map);
-        
         consumerMarkers.push({ marker, id: consumer.id, data: consumer });
     });
     
@@ -332,6 +449,12 @@ function updateSelectors() {
             sourceSelect.innerHTML += `<option value="${source.id}">${source.name} (${(source.recoverableHeatMWhPerYear / 1000).toFixed(1)} GWh)</option>`;
         }
     });
+    // Mark as empty (placeholder shown) when no selection
+    if (sourceSelect.value === '' || !sourceSelect.value) {
+        sourceSelect.classList.add('empty');
+    } else {
+        sourceSelect.classList.remove('empty');
+    }
     
     // Update consumers dropdown
     consumerSelect.innerHTML = '<option value="">Select a consumer...</option>';
@@ -340,29 +463,42 @@ function updateSelectors() {
             consumerSelect.innerHTML += `<option value="${consumer.id}">${consumer.name} (${(consumer.annualHeatDemandMWh / 1000).toFixed(1)} GWh)</option>`;
         }
     });
+    // Mark as empty (placeholder shown) when no selection
+    if (consumerSelect.value === '' || !consumerSelect.value) {
+        consumerSelect.classList.add('empty');
+    } else {
+        consumerSelect.classList.remove('empty');
+    }
     
     // Enable/disable calculate button based on selections
     updateCalculateButton();
 }
 
-// Update marker counts in UI
+// Update marker counts in UI (use data lengths so count is correct even before map is ready)
 function updateMarkerCounts() {
     const markerCounts = document.getElementById('markerCounts');
     if (markerCounts) {
-        markerCounts.innerHTML = `<i class="fas fa-map-marker-alt"></i> ${sourceMarkers.length} sources, ${consumerMarkers.length} consumers`;
+        markerCounts.innerHTML = `<i class="fas fa-map-marker-alt"></i> ${sources.length} sources, ${consumers.length} consumers`;
     }
 }
 
 // Setup event listeners
 function setupEventListeners() {
-    // Search button
+    // Search button: blank query does nothing and clears any markers; non-blank runs search
     const searchBtn = document.getElementById('searchBtn');
     if (searchBtn) {
         searchBtn.addEventListener('click', async () => {
-            const query = document.getElementById('locationSearch').value;
-            if (query) {
-                await loadData(query);
+            const query = (document.getElementById('locationSearch').value || '').trim();
+            if (!query) {
+                sources = [];
+                consumers = [];
+                showSearchBanner('', false);
+                if (mapInitialized) updateMarkers();
+                updateSelectors();
+                updateMarkerCounts();
+                return;
             }
+            await loadData(query);
         });
     }
     
@@ -373,11 +509,26 @@ function setupEventListeners() {
             selectedSourceId = e.target.value;
             highlightSelected();
             updateCalculateButton();
+            // toggle empty class so placeholder shows as white background when no selection
+            if (e.target.value === '') e.target.classList.add('empty'); else e.target.classList.remove('empty');
             
             // Auto-open popup for selected source
             if (selectedSourceId) {
-                const marker = sourceMarkers.find(m => m.id === selectedSourceId);
-                if (marker) marker.marker.togglePopup();
+                const markerObj = sourceMarkers.find(m => m.id === selectedSourceId);
+                if (markerObj) {
+                    // Remove select button for dropdown-triggered popup
+                    const popupContent = `
+                        <div style="padding: 10px; min-width: 200px;">
+                        <h3 style="margin: 0 0 10px 0; color: #ff0000;">🏭 ${markerObj.data.name || 'Unnamed Source'}</h3>
+                        <p style='color:#000;'><strong>Industry:</strong> ${markerObj.data.industry || 'Industrial'}</p>
+                        <p style='color:#000;'><strong>Waste Heat:</strong> ${(markerObj.data.estimatedWasteHeatMWhPerYear / 1000).toFixed(1)} GWh/year</p>
+                        <p style='color:#000;'><strong>Recoverable:</strong> ${(markerObj.data.recoverableHeatMWhPerYear / 1000).toFixed(1)} GWh/year</p>
+                        <p style='color:#000;'><strong>Temperature:</strong> ${markerObj.data.temperatureClass || 'medium'}</p>
+                        </div>
+                    `;
+                    markerObj.marker.getPopup().setHTML(popupContent);
+                    markerObj.marker.togglePopup();
+                }
             }
         });
     }
@@ -392,9 +543,22 @@ function setupEventListeners() {
             
             // Auto-open popup for selected consumer
             if (selectedConsumerId) {
-                const marker = consumerMarkers.find(m => m.id === selectedConsumerId);
-                if (marker) marker.marker.togglePopup();
+                const markerObj = consumerMarkers.find(m => m.id === selectedConsumerId);
+                if (markerObj) {
+                    // Remove select button for dropdown-triggered popup
+                    const popupContent = `
+                        <div style="padding: 10px; min-width: 200px;">
+                        <h3 style="margin: 0 0 10px 0; color: #007bff;">🏢 ${markerObj.data.name || 'Unnamed Consumer'}</h3>
+                        <p style='color:#000;'><strong>Category:</strong> ${markerObj.data.category || 'Building'}</p>
+                        <p style='color:#000;'><strong>Heat Demand:</strong> ${(markerObj.data.annualHeatDemandMWh / 1000).toFixed(1)} GWh/year</p>
+                        </div>
+                    `;
+                    markerObj.marker.getPopup().setHTML(popupContent);
+                    markerObj.marker.togglePopup();
+                }
             }
+            // toggle empty class so placeholder shows as white background when no selection
+            if (e.target.value === '') e.target.classList.add('empty'); else e.target.classList.remove('empty');
         });
     }
     
@@ -416,11 +580,53 @@ function setupEventListeners() {
         pdfBtn.addEventListener('click', generatePdf);
     }
     
-    // Enter key in search
+    // Search input: autocomplete + Enter
     const searchInput = document.getElementById('locationSearch');
+    const autocompleteList = document.getElementById('autocompleteList');
     if (searchInput) {
-        searchInput.addEventListener('keypress', (e) => {
+        searchInput.addEventListener('input', () => {
+            showAutocomplete(searchInput.value);
+        });
+        searchInput.addEventListener('focus', () => {
+            showAutocomplete(searchInput.value);
+        });
+        searchInput.addEventListener('blur', () => {
+            setTimeout(hideAutocomplete, 180);
+        });
+        searchInput.addEventListener('keydown', (e) => {
+            const items = autocompleteList ? autocompleteList.querySelectorAll('.autocomplete-item') : [];
+            const active = autocompleteList ? autocompleteList.querySelector('.autocomplete-item.active') : null;
+            let idx = active ? Array.prototype.indexOf.call(items, active) : -1;
+
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                if (items.length) {
+                    idx = (idx + 1) % items.length;
+                    items.forEach((el, i) => el.classList.toggle('active', i === idx));
+                    items[idx]?.scrollIntoView({ block: 'nearest' });
+                }
+                return;
+            }
+            if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (items.length) {
+                    idx = idx <= 0 ? items.length - 1 : idx - 1;
+                    items.forEach((el, i) => el.classList.toggle('active', i === idx));
+                    items[idx]?.scrollIntoView({ block: 'nearest' });
+                }
+                return;
+            }
             if (e.key === 'Enter') {
+                if (items.length && idx >= 0 && items[idx]) {
+                    e.preventDefault();
+                    searchInput.value = items[idx].getAttribute('data-value');
+                    hideAutocomplete();
+                    document.getElementById('searchBtn')?.click();
+                }
+            }
+        });
+        searchInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && (!autocompleteList || autocompleteList.getAttribute('aria-hidden') === 'true')) {
                 document.getElementById('searchBtn')?.click();
             }
         });
@@ -474,31 +680,54 @@ function highlightSelected() {
     }
 }
 
-// Fit map to show all markers
+// Fit map to show all active markers (zoom and pan with 2s animation)
+const FIT_BOUNDS_DURATION_MS = 2000;
+const FIT_BOUNDS_PADDING = 50;
+const SINGLE_MARKER_ZOOM = 13;
+
 function fitMarkersToBounds() {
     if (!map || !mapInitialized) return;
     
     if (sourceMarkers.length === 0 && consumerMarkers.length === 0) {
-        alert('No markers to fit');
         return;
     }
     
     const bounds = new maplibregl.LngLatBounds();
+    sourceMarkers.forEach(({ marker }) => bounds.extend(marker.getLngLat()));
+    consumerMarkers.forEach(({ marker }) => bounds.extend(marker.getLngLat()));
     
-    sourceMarkers.forEach(({ marker }) => {
-        bounds.extend(marker.getLngLat());
-    });
+    const totalMarkers = sourceMarkers.length + consumerMarkers.length;
+    const singleMarker = totalMarkers === 1;
+    const center = bounds.getCenter();
     
-    consumerMarkers.forEach(({ marker }) => {
-        bounds.extend(marker.getLngLat());
-    });
-    
-    map.fitBounds(bounds, { padding: 50, duration: 1000 });
+    if (singleMarker) {
+        map.flyTo({
+            center: [center.lng, center.lat],
+            zoom: SINGLE_MARKER_ZOOM,
+            duration: FIT_BOUNDS_DURATION_MS
+        });
+    } else {
+        map.fitBounds(bounds, {
+            padding: FIT_BOUNDS_PADDING,
+            duration: FIT_BOUNDS_DURATION_MS,
+            maxZoom: 14
+        });
+    }
 }
 
 // Calculate opportunity for selected source and consumer
 async function calculateOpportunity() {
-    if (!selectedSourceId || !selectedConsumerId) return;
+    // Ensure we have the latest selection values (defensive — read from DOM if needed)
+    const sourceSelectEl = document.getElementById('sourceSelect');
+    const consumerSelectEl = document.getElementById('consumerSelect');
+    if (!selectedSourceId && sourceSelectEl) selectedSourceId = sourceSelectEl.value;
+    if (!selectedConsumerId && consumerSelectEl) selectedConsumerId = consumerSelectEl.value;
+
+    // If still missing, notify user and stop
+    if (!selectedSourceId || !selectedConsumerId) {
+        alert('Please select both a heat source and a heat consumer before calculating.');
+        return;
+    }
     
     // Show loading state
     const calculateBtn = document.getElementById('calculateBtn');
@@ -540,6 +769,14 @@ async function calculateOpportunity() {
             resultsSection.scrollIntoView({ behavior: 'smooth' });
         }
         
+        // Load and show rankings for the selected source
+        await loadRankings(selectedSourceId);
+        const rankingsSection = document.querySelector('.rankings-section');
+        if (rankingsSection) {
+            rankingsSection.style.display = 'block';
+            rankingsSection.scrollIntoView({ behavior: 'smooth' });
+        }
+        
     } catch (error) {
         console.error('Error calculating opportunity:', error);
         alert('Failed to calculate opportunity. Using demo data instead.');
@@ -547,10 +784,37 @@ async function calculateOpportunity() {
         // Create demo opportunity for testing
         createDemoOpportunity();
         
+        // Show results section
+        const resultsSection = document.getElementById('resultsSection');
+        if (resultsSection) {
+            resultsSection.style.display = 'block';
+            resultsSection.scrollIntoView({ behavior: 'smooth' });
+        }
+        
+        // Load and show rankings for the selected source
+        await loadRankings(selectedSourceId);
+        const rankingsSection = document.querySelector('.rankings-section');
+        if (rankingsSection) {
+            rankingsSection.style.display = 'block';
+            rankingsSection.scrollIntoView({ behavior: 'smooth' });
+        }
+        
     } finally {
         // Restore button
         calculateBtn.innerHTML = originalText;
         calculateBtn.disabled = false;
+
+        // Always attempt to load and show rankings (defensive — show UI even if calculation failed)
+        try {
+            await loadRankings(selectedSourceId);
+        } catch (e) {
+            console.warn('Failed to load rankings in finally:', e);
+        }
+        const rankingsSection = document.querySelector('.rankings-section');
+        if (rankingsSection) {
+            rankingsSection.style.display = 'block';
+            rankingsSection.scrollIntoView({ behavior: 'smooth' });
+        }
     }
 }
 
@@ -833,7 +1097,7 @@ function createFinancialChart(initialCost, annualSavings) {
 }
 
 // Load ranked opportunities
-async function loadRankings() {
+async function loadRankings(sourceId = null) {
     try {
         const response = await fetch(`${API_BASE_URL}/api/ranked-opportunities`);
         
@@ -843,26 +1107,28 @@ async function loadRankings() {
         
         const data = await response.json();
         allRankings = data.rankings || [];
-        displayRankings(allRankings);
+        displayRankings(allRankings, sourceId);
         
     } catch (error) {
         console.error('Error loading rankings:', error);
         showError('rankingsBody', 'Failed to load rankings. Using demo data.');
         
         // Create demo rankings
-        createDemoRankings();
+        createDemoRankings(sourceId);
     }
 }
 
 // Create demo rankings for testing
-function createDemoRankings() {
+function createDemoRankings(sourceId = null) {
     if (sources.length === 0 || consumers.length === 0) return;
     
     const demoRankings = [];
     
-    for (let i = 0; i < Math.min(5, sources.length); i++) {
-        for (let j = 0; j < Math.min(2, consumers.length); j++) {
-            const source = sources[i];
+    const sourcesToUse = sourceId ? sources.filter(s => s.id === sourceId) : sources.slice(0, Math.min(5, sources.length));
+    
+    for (let i = 0; i < sourcesToUse.length; i++) {
+        for (let j = 0; j < consumers.length; j++) {
+            const source = sourcesToUse[i];
             const consumer = consumers[j];
             
             if (!source || !consumer) continue;
@@ -887,11 +1153,11 @@ function createDemoRankings() {
         }
     }
     
-    displayRankings(demoRankings);
+    displayRankings(demoRankings, sourceId);
 }
 
 // Display rankings
-function displayRankings(rankings) {
+function displayRankings(rankings, sourceId = null) {
     const tbody = document.getElementById('rankingsBody');
     if (!tbody) return;
     
@@ -900,8 +1166,21 @@ function displayRankings(rankings) {
         return;
     }
     
+    // Filter rankings if sourceId is provided
+    const filteredRankings = sourceId ? rankings.filter(r => r.opportunity.sourceId === sourceId) : rankings;
+    
+    // Sort by feasibility score (descending) then re-rank the filtered list
+    filteredRankings.sort((a, b) => {
+        const aScore = (a && a.opportunity && a.opportunity.feasibilityScore) || 0;
+        const bScore = (b && b.opportunity && b.opportunity.feasibilityScore) || 0;
+        return bScore - aScore;
+    });
+    filteredRankings.forEach((item, index) => {
+        item.rank = index + 1;
+    });
+    
     let html = '';
-    rankings.slice(0, 10).forEach((item, index) => {
+    filteredRankings.slice(0, 10).forEach((item, index) => {
         const opp = item.opportunity;
         const sourceName = getSourceName(opp.sourceId);
         const consumerName = getConsumerName(opp.consumerId);

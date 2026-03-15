@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HeatGrid - Waste Heat Redistribution Platform</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
     
     <!-- MapLibre GL JS (used with AWS Location Service Maps) -->
     <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet">
@@ -15,35 +16,57 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
     <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="attribution-black.css">
+    <!-- App favicon (replace with your logo files at assets/) -->
+    <link rel="icon" type="image/png" sizes="32x32" href="assets/heatgrid-favicon-32.png">
+    <link rel="icon" type="image/png" sizes="64x64" href="assets/heatgrid-favicon-64.png">
+    <link rel="icon" type="image/png" sizes="128x128" href="assets/heatgrid-favicon-128.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="assets/heatgrid-favicon-180.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="assets/heatgrid-favicon-192.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="assets/heatgrid-favicon-512.png">
+    <link id="app-favicon" rel="icon" type="image/png" sizes="32x32" href="assets/heatgrid-favicon-32.png">
+    <link rel="shortcut icon" href="assets/heatgrid-favicon-32.png">
+    <link rel="manifest" href="/assets/site.webmanifest">
+    <meta name="theme-color" content="#06b6d4">
+    <link rel="mask-icon" href="/assets/heatgrid-favicon-180.png" color="#06b6d4">
+
+    <!-- Datatype font stylesheet -->
+    <link rel="stylesheet" href="datatype-font.css">
 
 </head>
 <body>
     <div class="container">
         <!-- Header -->
         <header>
-            <h1>🔥 HeatGrid <span>Beta</span></h1>
-            <p class="subtitle">Turn Industrial Waste Heat into Community Savings</p>
-            <p style="margin-top: 15px; opacity: 0.9;">
-                <i class="fas fa-check-circle"></i> Powered by AWS Location Services 
-                <i class="fas fa-circle" style="margin-left: 15px; color: #ffd700;"></i> Ohio Seed Data
-            </p>
+            <div class="header-inner">
+                <img id="app-logo" src="assets/heatgrid-logo.png" alt="HeatGrid logo">
+                <div class="title-block">
+                    <h1>HeatGrid</h1>
+                    <p class="subtitle">Turn industrial waste heat into community savings</p>
+                </div>
+            </div>
         </header>
 
-        <!-- Search Section -->
+        <!-- Search & Map (same width) -->
+        <div class="search-and-map-wrap">
         <div class="card search-section">
             <h3><i class="fas fa-search"></i> Find Heat Sources & Demands</h3>
             <div class="search-box">
-                <input type="text" id="locationSearch" placeholder="Enter city or region (e.g., Cleveland, OH)" value="Ohio">
+                <div class="autocomplete-wrap">
+                    <input type="text" id="locationSearch" placeholder="Enter city, region or Address. (e.g., Toledo, OH)" value="" autocomplete="off">
+                    <ul id="autocompleteList" class="autocomplete-list" role="listbox" aria-expanded="false" aria-hidden="true"></ul>
+                </div>
                 <button id="searchBtn"><i class="fas fa-map-marker-alt"></i> Search</button>
             </div>
-            <p class="hint">
+            <!-- <p class="hint">
                 <i class="fas fa-info-circle"></i> 
-                Using Amazon Location Service for geocoding • Seed data shows Ohio facilities
-            </p>
+                Add a hint here if needed.
+            </p> -->
+            <div id="searchBanner" class="search-banner" role="alert" style="display: none;"></div>
         </div>
 
         <!-- Map Section -->
-        <div class="card">
+        <div class="card map-card">
             <div class="map-header">
                 <h3><i class="fas fa-map-marked-alt"></i> Heat Map</h3>
                 <div class="legend">
@@ -51,7 +74,7 @@
                     <span><span class="dot blue"></span> Heat Consumers (Buildings)</span>
                 </div>
             </div>
-            <div id="map" style="height: 500px; width: 100%; min-height: 400px; background: #e9ecef; border-radius: 10px;"></div>
+            <div id="map" style="height: 500px; min-height: 400px; background: #e9ecef; border-radius: 10px;"></div>
             <div class="map-controls">
                 <button id="fitMarkersBtn" class="btn-secondary">
                     <i class="fas fa-expand-arrows-alt"></i> Fit All Markers
@@ -60,6 +83,7 @@
                     <i class="fas fa-map-marker-alt"></i> Loading markers...
                 </span>
             </div>
+        </div>
         </div>
 
         <!-- Selection & Calculation Section -->
@@ -133,11 +157,11 @@
         </div>
 
         <!-- Rankings Section -->
-        <div class="card rankings-section">
+        <div class="card rankings-section" style="display: none;">
             <h3><i class="fas fa-list-ol"></i> Top Ranked Opportunities</h3>
             <p class="hint" style="margin-bottom: 15px;">
                 <i class="fas fa-info-circle"></i> 
-                Ranked by feasibility score (higher = better)
+                Top opportunities for the selected heat source, ranked by feasibility score (higher = better)
             </p>
             <table>
                 <thead>
@@ -161,20 +185,30 @@
 
         <!-- Footer -->
         <div style="text-align: center; padding: 20px; color: #6c757d;">
-            <p>
-                <i class="fas fa-code-branch"></i> Built for Hackathon • 
-                <i class="fas fa-cloud"></i> AWS Native • 
-                <i class="fas fa-map"></i> Amazon Location Services
-            </p>
             <p style="font-size: 0.9em; margin-top: 10px;">
-                © 2024 HeatGrid • Waste Heat Recovery Platform
+                © <span id="footerYear"></span> HeatGrid • Waste Heat Recovery Platform
             </p>
         </div>
     </div>
     
-    <!-- Set API base URL for Amplify: point to your API Gateway URL (e.g. Lambda backend). Leave empty to use Ohio seed fallback. -->
-    <script>window.HEATGRID_API_BASE_URL = "";</script>
+    <!-- API base URL: set to your backend (e.g. http://localhost:3000 for npm run dev, or API Gateway for production). Empty = same-origin only. -->
+    <script>window.HEATGRID_API_BASE_URL = "http://localhost:3000";</script>
     <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
     <script src="script.js"></script>
+    <script>
+        // Dynamic footer year and cache-busted favicon hookup
+        (function(){
+            const y = new Date().getFullYear();
+            const el = document.getElementById('footerYear');
+            if (el) el.textContent = y;
+            const favicon = document.getElementById('app-favicon');
+            if (favicon) {
+                const url = 'assets/heatgrid-favicon-32.png?v=' + Date.now();
+                favicon.href = url;
+                const alt = document.querySelector('link[rel="shortcut icon"]');
+                if (alt) alt.href = url;
+            }
+        })();
+    </script>
 </body>
 </html>

@@ -6,3 +6,4 @@ export { handleGetHeatSources } from "./handlers/heat-sources";
 export { handleGetHeatConsumers } from "./handlers/heat-consumers";
 export { handleEvaluateOpportunity } from "./handlers/evaluate-opportunity";
 export { handleGetRankedOpportunities } from "./handlers/ranked-opportunities";
+export { handleGetTags } from "./handlers/tags";
