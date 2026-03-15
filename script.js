@@ -771,8 +771,8 @@ function updateRangeCircleAndHighlights() {
                 type: 'fill',
                 source: RANGE_CIRCLE_SOURCE_ID,
                 paint: {
-                    'fill-color': '#22c55e',
-                    'fill-opacity': 0.15
+                    'fill-color': '#eab308',
+                    'fill-opacity': 0.4
                 }
             });
 
@@ -908,14 +908,14 @@ function selectFromNearby(sourceId, consumerId) {
 
 // Highlight selected markers and opposing heat types within 2 km range
 function highlightSelected() {
-    // Reset all marker colors
+    // Reset all marker styles; all markers use 100% opacity
     sourceMarkers.forEach(({ marker }) => {
         marker.getElement().style.filter = 'none';
-        marker.getElement().style.opacity = '0.7';
+        marker.getElement().style.opacity = '1';
     });
     consumerMarkers.forEach(({ marker }) => {
         marker.getElement().style.filter = 'none';
-        marker.getElement().style.opacity = '0.7';
+        marker.getElement().style.opacity = '1';
     });
 
     // Highlight selected source (gold)

@@ -72,7 +72,7 @@
                 <div class="legend">
                     <span><span class="dot red"></span> Heat Sources (Industrial)</span>
                     <span><span class="dot blue"></span> Heat Consumers (Buildings)</span>
-                    <span><span class="dot yellow"></span> Nearby Locations</span>
+                    <span><span class="dot yellow"></span> 2 km Range</span>
                 </div>
             </div>
             <div id="map" style="height: 500px; min-height: 400px; background: #e9ecef; border-radius: 10px;"></div>
@@ -164,11 +164,7 @@
 
         <!-- Nearby Locations: rankings of consumers/sources within 2 km when a heat source or consumer is selected (Best Score from src/lib) -->
         <div id="nearbyLocationsWidget" class="card nearby-locations-widget" style="display: none;">
-            <h3><i class="fas fa-map-marker-alt"></i> <span class="dot yellow"></span> Nearby Locations</h3>
-            <p class="hint" style="margin-bottom: 12px;">
-                <i class="fas fa-info-circle"></i>
-                Ranked by Best Score (distance, payback, savings, emissions). Within 2 km of selected marker.
-            </p>
+            <h3><i class="fas fa-map-marker-alt"></i> <span class="dot yellow"></span> Comparing Nearby Consumers/Sources</h3>
             <div class="nearby-locations-table-wrap">
                 <table class="nearby-table">
                     <thead>
