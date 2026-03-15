@@ -19,6 +19,14 @@ const OHIO_HEAT_CONSUMERS_FALLBACK = [
   { id: "ohio-consumer-5", name: "Akron Food Processing Plant", category: "Food Processing", latitude: 41.0865, longitude: -81.523, annualHeatDemandMWh: 4000 }
 ];
 
+/** Filter Ohio fallback by search query: name contains query (case-insensitive). Empty query = full array. */
+function filterFallbackByQuery(arr, searchQuery) {
+  const q = (searchQuery && typeof searchQuery === 'string') ? searchQuery.trim() : '';
+  if (!q) return arr.slice();
+  const normalized = q.toLowerCase();
+  return arr.filter((item) => item.name && item.name.toLowerCase().includes(normalized));
+}
+
 // Global variables
 let map;
 let sources = [];
@@ -31,6 +39,27 @@ let currentRouteLayer = null;
 let currentOpportunity = null;
 let allRankings = [];
 let mapInitialized = false;
+
+// 2 km range circle (yellow)
+const RANGE_RADIUS_KM = 2;
+const RANGE_CIRCLE_SOURCE_ID = 'range-circle-source';
+const RANGE_CIRCLE_LAYER_ID = 'range-circle-layer';
+const RANGE_CIRCLE_FILL_COLOR = '#eab308';
+
+function getCirclePolygon(centerLat, centerLng, radiusKm) {
+    const points = 64;
+    const coords = [];
+    const latDegPerKm = 1 / 111;
+    const lngDegPerKm = 1 / (111 * Math.cos(centerLat * Math.PI / 180));
+    for (let i = 0; i <= points; i++) {
+        const angle = (2 * Math.PI * i) / points;
+        coords.push([
+            centerLng + radiusKm * lngDegPerKm * Math.sin(angle),
+            centerLat + radiusKm * latDegPerKm * Math.cos(angle)
+        ]);
+    }
+    return coords;
+}
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', async () => {
@@ -211,9 +240,9 @@ async function loadData(searchQuery = '') {
             console.warn('API not available for consumers, using Ohio seed fallback');
         }
         
-        // Update global variables; use Ohio fallback when API returned no data
-        sources = (sourcesData.heatSources && sourcesData.heatSources.length) ? (sourcesData.heatSources || []) : OHIO_HEAT_SOURCES_FALLBACK;
-        consumers = (consumersData.heatConsumers && consumersData.heatConsumers.length) ? (consumersData.heatConsumers || []) : OHIO_HEAT_CONSUMERS_FALLBACK;
+        // Update global variables; use Ohio fallback when API returned no data (filtered by search)
+        sources = (sourcesData.heatSources && sourcesData.heatSources.length) ? (sourcesData.heatSources || []) : filterFallbackByQuery(OHIO_HEAT_SOURCES_FALLBACK, searchQuery);
+        consumers = (consumersData.heatConsumers && consumersData.heatConsumers.length) ? (consumersData.heatConsumers || []) : filterFallbackByQuery(OHIO_HEAT_CONSUMERS_FALLBACK, searchQuery);
         
         console.log(`Loaded ${sources.length} sources, ${consumers.length} consumers`);
         
@@ -359,10 +388,9 @@ function setupEventListeners() {
     const searchBtn = document.getElementById('searchBtn');
     if (searchBtn) {
         searchBtn.addEventListener('click', async () => {
-            const query = document.getElementById('locationSearch').value;
-            if (query) {
-                await loadData(query);
-            }
+            const query = (document.getElementById('locationSearch').value || '').trim();
+            await loadData(query || '');
+            await loadRankings(query || '');
         });
     }
     
@@ -443,8 +471,40 @@ function updateCalculateButton() {
     }
 }
 
+// Update 2 km range circle on map (yellow fill)
+function updateRangeCircle() {
+    if (!map || !mapInitialized) return;
+    if (map.getLayer(RANGE_CIRCLE_LAYER_ID)) map.removeLayer(RANGE_CIRCLE_LAYER_ID);
+    if (map.getSource(RANGE_CIRCLE_SOURCE_ID)) map.removeSource(RANGE_CIRCLE_SOURCE_ID);
+    let centerLat = null, centerLng = null;
+    if (selectedSourceId) {
+        const s = sources.find(x => x.id === selectedSourceId);
+        if (s && s.latitude != null && s.longitude != null) { centerLat = s.latitude; centerLng = s.longitude; }
+    }
+    if (centerLat == null && selectedConsumerId) {
+        const c = consumers.find(x => x.id === selectedConsumerId);
+        if (c && c.latitude != null && c.longitude != null) { centerLat = c.latitude; centerLng = c.longitude; }
+    }
+    if (centerLat == null || centerLng == null) return;
+    const ring = getCirclePolygon(centerLat, centerLng, RANGE_RADIUS_KM);
+    map.addSource(RANGE_CIRCLE_SOURCE_ID, {
+        type: 'geojson',
+        data: { type: 'Feature', geometry: { type: 'Polygon', coordinates: [ring] } }
+    });
+    map.addLayer({
+        id: RANGE_CIRCLE_LAYER_ID,
+        type: 'fill',
+        source: RANGE_CIRCLE_SOURCE_ID,
+        paint: {
+            'fill-color': RANGE_CIRCLE_FILL_COLOR,
+            'fill-opacity': 0.2
+        }
+    });
+}
+
 // Highlight selected markers
 function highlightSelected() {
+    updateRangeCircle();
     // Reset all marker colors
     sourceMarkers.forEach(({ marker }) => {
         marker.getElement().style.filter = 'none';
@@ -832,10 +892,14 @@ function createFinancialChart(initialCost, annualSavings) {
     });
 }
 
-// Load ranked opportunities
-async function loadRankings() {
+// Load ranked opportunities (optional searchQuery filters to that location, e.g. Toledo or Columbus)
+async function loadRankings(searchQuery) {
     try {
-        const response = await fetch(`${API_BASE_URL}/api/ranked-opportunities`);
+        let url = `${API_BASE_URL}/api/ranked-opportunities`;
+        if (searchQuery && String(searchQuery).trim()) {
+            url += `?locationSearchQuery=${encodeURIComponent(String(searchQuery).trim())}`;
+        }
+        const response = await fetch(url);
         
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);

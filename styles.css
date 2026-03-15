@@ -150,6 +150,7 @@ h1 span {
 
 .dot.red { background: #ff4d4d; box-shadow: 0 0 10px #ff4d4d; }
 .dot.blue { background: #4d79ff; box-shadow: 0 0 10px #4d79ff; }
+.dot.yellow { background: #eab308; box-shadow: 0 0 10px rgba(234,179,8,0.4); }
 
 #map {
     width: 100%;

@@ -68,9 +68,13 @@ app.post("/api/evaluate-opportunity", async (req, res) => {
   }
 });
 
-app.get("/api/ranked-opportunities", async (_req, res) => {
+app.get("/api/ranked-opportunities", async (req, res) => {
   try {
-    const data = await handleGetRankedOpportunities();
+    const locationSearchQuery =
+      typeof req.query.locationSearchQuery === "string"
+        ? req.query.locationSearchQuery
+        : undefined;
+    const data = await handleGetRankedOpportunities({ locationSearchQuery });
     res.json(data);
   } catch (err) {
     console.error("GET /api/ranked-opportunities", err);

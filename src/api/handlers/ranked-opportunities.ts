@@ -2,14 +2,24 @@ import type { GetRankedOpportunitiesResponse } from "../../../shared/api-contrac
 import type { OpportunityRanking } from "../../../shared/types";
 import { HEAT_SOURCES_OHIO } from "../../data/heat-sources-ohio";
 import { HEAT_CONSUMERS_OHIO } from "../../data/heat-consumers-ohio";
+import { filterOhioByQuery } from "../../data/filter-ohio-by-query";
 import { evaluateOpportunity } from "../../lib/integration/evaluate-opportunity";
 
 /**
- * Returns all opportunities from seed sources and consumers, ranked by feasibility score (desc).
+ * Returns opportunities from seed sources and consumers, ranked by feasibility score (desc).
+ * Optional locationSearchQuery filters to sources/consumers whose name contains the query.
  */
-export async function handleGetRankedOpportunities(): Promise<GetRankedOpportunitiesResponse> {
-  const sources = [...HEAT_SOURCES_OHIO];
-  const consumers = [...HEAT_CONSUMERS_OHIO];
+export async function handleGetRankedOpportunities(options?: {
+  locationSearchQuery?: string;
+}): Promise<GetRankedOpportunitiesResponse> {
+  const sources = filterOhioByQuery(
+    HEAT_SOURCES_OHIO,
+    options?.locationSearchQuery
+  );
+  const consumers = filterOhioByQuery(
+    HEAT_CONSUMERS_OHIO,
+    options?.locationSearchQuery
+  );
   const opportunities: OpportunityRanking[] = [];
   for (const source of sources) {
     for (const consumer of consumers) {

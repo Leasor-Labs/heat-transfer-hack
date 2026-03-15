@@ -1,5 +1,6 @@
 import type { HeatConsumer } from "../../shared/types";
 import { HEAT_CONSUMERS_OHIO } from "./heat-consumers-ohio";
+import { filterOhioByQuery } from "./filter-ohio-by-query";
 import {
   searchPlacesByText,
   isLocationServiceConfigured,
@@ -33,7 +34,10 @@ export async function getHeatConsumers(options?: {
       }));
     }
   }
-  return [...HEAT_CONSUMERS_OHIO];
+  return filterOhioByQuery(
+    HEAT_CONSUMERS_OHIO,
+    options?.locationSearchQuery
+  );
 }
 
 /**

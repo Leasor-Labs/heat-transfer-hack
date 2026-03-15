@@ -1,5 +1,6 @@
 import type { HeatSource } from "../../shared/types";
 import { HEAT_SOURCES_OHIO } from "./heat-sources-ohio";
+import { filterOhioByQuery } from "./filter-ohio-by-query";
 import {
   searchPlacesByText,
   isLocationServiceConfigured,
@@ -41,7 +42,7 @@ export async function getHeatSources(options?: {
       }));
     }
   }
-  return [...HEAT_SOURCES_OHIO];
+  return filterOhioByQuery(HEAT_SOURCES_OHIO, options?.locationSearchQuery);
 }
 
 /**
