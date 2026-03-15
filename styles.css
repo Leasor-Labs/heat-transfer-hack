@@ -180,8 +180,8 @@ h1 {
     margin-right: 5px;
 }
 
-.dot.red { background: var(--accent-2); box-shadow: 0 0 10px rgba(249,115,22,0.18); }
-.dot.blue { background: #ffb86b; box-shadow: 0 0 10px rgba(255,184,107,0.12); }
+.dot.red { background: #ff0000; box-shadow: 0 0 10px rgba(255,77,77,0.18); }
+.dot.blue { background: #007bff; box-shadow: 0 0 10px rgba(77,121,255,0.12); }
 
 #map {
     height: 520px;
@@ -233,6 +233,25 @@ h1 {
 .select-group select:focus {
     border-color: rgba(249,115,22,0.12);
     outline: none;
+}
+
+/* Make dropdown text inside the Create Heat Connection panel dark for readability */
+.selection-panel .select-group select {
+    color: #000;
+}
+.selection-panel .select-group select option {
+    color: #000;
+    background: #fff;
+}
+
+/* When the select has no value (placeholder shown), show a white background
+   and black text for the closed select control (not the expanded dropdown). */
+.selection-panel .select-group select.empty {
+    background: #ffffff;
+    color: #000;
+}
+.selection-panel .select-group select.empty::-ms-expand { /* remove IE arrow styling clash */
+    color: #000;
 }
 
 /* Buttons */
