@@ -72,7 +72,7 @@
                 <div class="legend">
                     <span><span class="dot red"></span> Heat Sources (Industrial)</span>
                     <span><span class="dot blue"></span> Heat Consumers (Buildings)</span>
-                    <span><span class="dot green"></span> Within 2 km of selected (opposing type)</span>
+                    <span><span class="dot yellow"></span> Nearby Locations</span>
                 </div>
             </div>
             <div id="map" style="height: 500px; min-height: 400px; background: #e9ecef; border-radius: 10px;"></div>
@@ -85,28 +85,6 @@
                 </span>
             </div>
         </div>
-        </div>
-
-        <!-- Selection & Calculation Section -->
-        <div class="card">
-            <h3><i class="fas fa-link"></i> Create Heat Connection</h3>
-            <div class="selection-panel">
-                <div class="select-group">
-                    <label><i class="fas fa-industry"></i> Heat Source:</label>
-                    <select id="sourceSelect">
-                        <option value="">Select a source...</option>
-                    </select>
-                </div>
-                <div class="select-group">
-                    <label><i class="fas fa-building"></i> Heat Consumer:</label>
-                    <select id="consumerSelect">
-                        <option value="">Select a consumer...</option>
-                    </select>
-                </div>
-                <button id="calculateBtn" class="btn-primary" disabled>
-                    <i class="fas fa-calculator"></i> Calculate Opportunity
-                </button>
-            </div>
         </div>
 
         <!-- Results Section (Hidden by default) -->

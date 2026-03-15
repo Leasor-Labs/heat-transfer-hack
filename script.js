@@ -309,8 +309,14 @@ async function initMap() {
 // Zoom level when flying to a geocoded location (no markers or before fitting to markers).
 const GEOCODE_ZOOM = 12;
 
-// Load data from backend
+// Load data from backend; markers always reflect the search query (only API results for that query, or empty on error).
 async function loadData(searchQuery = '') {
+    const hadSearchQuery = (searchQuery || '').trim().length > 0;
+    if (hadSearchQuery) {
+        selectedSourceId = null;
+        selectedConsumerId = null;
+    }
+
     try {
         // Future Feature: showLoading('rankingsBody', 'Loading heat sources and consumers...');
         
@@ -379,6 +385,7 @@ async function loadData(searchQuery = '') {
         const searchWasUsed = searchQuery.length > 0;
         const errorCode25 = (sourcesData.errorCode === 25) || (consumersData.errorCode === 25);
 
+        // Markers reflect the search: when a query was used, show only API results (never fallback).
         sources = searchWasUsed ? apiSources : (apiSources.length ? apiSources : OHIO_HEAT_SOURCES_FALLBACK);
         consumers = searchWasUsed ? apiConsumers : (apiConsumers.length ? apiConsumers : OHIO_HEAT_CONSUMERS_FALLBACK);
 
@@ -411,13 +418,17 @@ async function loadData(searchQuery = '') {
         
     } catch (error) {
         console.error('Error loading data:', error);
-        sources = OHIO_HEAT_SOURCES_FALLBACK;
-        consumers = OHIO_HEAT_CONSUMERS_FALLBACK;
+        if (hadSearchQuery) {
+            sources = [];
+            consumers = [];
+        } else {
+            sources = OHIO_HEAT_SOURCES_FALLBACK;
+            consumers = OHIO_HEAT_CONSUMERS_FALLBACK;
+        }
         showSearchBanner('', false);
         if (mapInitialized) updateMarkers();
         updateSelectors();
         updateMarkerCounts();
-        // Future Feature: showError('rankingsBody', 'Using Ohio seed data (API unavailable).');
     }
 }
 
@@ -849,16 +860,16 @@ function highlightSelected() {
         }
     }
 
-    // Highlight opposing heat types within 2 km (green glow)
+    // Highlight opposing heat types within 2 km (yellow glow – Nearby Locations)
     sourceMarkers.forEach(({ marker, id }) => {
         if (inRangeOpposingSourceIds.indexOf(id) !== -1) {
-            marker.getElement().style.filter = 'drop-shadow(0 0 8px #22c55e)';
+            marker.getElement().style.filter = 'drop-shadow(0 0 8px #eab308)';
             marker.getElement().style.opacity = '1';
         }
     });
     consumerMarkers.forEach(({ marker, id }) => {
         if (inRangeOpposingConsumerIds.indexOf(id) !== -1) {
-            marker.getElement().style.filter = 'drop-shadow(0 0 8px #22c55e)';
+            marker.getElement().style.filter = 'drop-shadow(0 0 8px #eab308)';
             marker.getElement().style.opacity = '1';
         }
     });
