@@ -6,8 +6,8 @@
 import type { HeatSource } from "../../shared/types";
 import type { HeatConsumer } from "../../shared/types";
 
-/** Heat sources for fallback: Toledo area (~50 km) + a few in Columbus. */
-export const FALLBACK_HEAT_SOURCES: HeatSource[] = [
+/** Base heat sources for fallback: Toledo area (~50 km) + a few in Columbus. */
+const FALLBACK_HEAT_SOURCES_BASE: HeatSource[] = [
   // Toledo area (~50 km)
   {
     id: "fallback-source-1",
@@ -155,8 +155,22 @@ export const FALLBACK_HEAT_SOURCES: HeatSource[] = [
   },
 ];
 
-/** Heat consumers for fallback: Toledo area (~50 km) + a few in Columbus. */
-export const FALLBACK_HEAT_CONSUMERS: HeatConsumer[] = [
+/** Heat sources for fallback (expanded to ~100 synthetic entries). */
+export const FALLBACK_HEAT_SOURCES: HeatSource[] = Array.from(
+  { length: 100 },
+  (_v, i) => {
+    const base = FALLBACK_HEAT_SOURCES_BASE[i % FALLBACK_HEAT_SOURCES_BASE.length];
+    const copyIndex = Math.floor(i / FALLBACK_HEAT_SOURCES_BASE.length);
+    return {
+      ...base,
+      id: copyIndex === 0 ? base.id : `${base.id}-copy-${copyIndex + 1}`,
+      name: copyIndex === 0 ? base.name : `${base.name} (${copyIndex + 1})`,
+    };
+  }
+);
+
+/** Base heat consumers for fallback: Toledo area (~50 km) + a few in Columbus. */
+const FALLBACK_HEAT_CONSUMERS_BASE: HeatConsumer[] = [
   // Toledo area (~50 km)
   {
     id: "fallback-consumer-1",
@@ -264,3 +278,17 @@ export const FALLBACK_HEAT_CONSUMERS: HeatConsumer[] = [
     annualHeatDemandMWh: 3200,
   },
 ];
+
+/** Heat consumers for fallback (expanded to ~100 synthetic entries). */
+export const FALLBACK_HEAT_CONSUMERS: HeatConsumer[] = Array.from(
+  { length: 100 },
+  (_v, i) => {
+    const base = FALLBACK_HEAT_CONSUMERS_BASE[i % FALLBACK_HEAT_CONSUMERS_BASE.length];
+    const copyIndex = Math.floor(i / FALLBACK_HEAT_CONSUMERS_BASE.length);
+    return {
+      ...base,
+      id: copyIndex === 0 ? base.id : `${base.id}-copy-${copyIndex + 1}`,
+      name: copyIndex === 0 ? base.name : `${base.name} (${copyIndex + 1})`,
+    };
+  }
+);
