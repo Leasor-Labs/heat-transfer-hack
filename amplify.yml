@@ -9,10 +9,10 @@ frontend:
         # Repo root (Amplify may run from parent of heat-transfer-hack)
         - |
           REPO_ROOT="${CODEBUILD_SRC_DIR:-.}"
-          [ -d "heat-transfer-hack" ] && REPO_ROOT=""
+          [ -d "heat-transfer-hack" ] && REPO_ROOT="heat-transfer-hack"
           cd "$REPO_ROOT"
           chmod +x node_modules/.bin/* 2>/dev/null || true
-        # Seed DynamoDB with Toledo data (only if tables exist; set env in Amplify if you use SAM backend)
+        # Seed DynamoDB with Toledo data (only if script exists and tables are set)
         - |
           REPO_ROOT="${CODEBUILD_SRC_DIR:-.}"
           [ -d "build" ] && REPO_ROOT="build"
@@ -20,7 +20,7 @@ frontend:
           export HEAT_SOURCES_TABLE="${HEAT_SOURCES_TABLE:-HeatSources}"
           export HEAT_CONSUMERS_TABLE="${HEAT_CONSUMERS_TABLE:-HeatConsumers}"
           export AWS_REGION="${AWS_REGION:-us-east-1}"
-          if [ -n "$HEAT_SOURCES_TABLE" ] && [ -n "$HEAT_CONSUMERS_TABLE" ]; then
+          if [ -n "$HEAT_SOURCES_TABLE" ] && [ -n "$HEAT_CONSUMERS_TABLE" ] && [ -f "src/data/seedDynamoFromToledo.ts" ]; then
             npx ts-node src/data/seedDynamoFromToledo.ts || true
           fi
         # Inject API URL into frontend (set REACT_APP_API_URL in Amplify env to your API Gateway URL)
@@ -30,8 +30,8 @@ frontend:
           cd "$REPO_ROOT"
           API_URL="${REACT_APP_API_URL:-}"
           API_URL="${API_URL%/}"
-          if [ -n "$API_URL" ]; then
-            sed -i.bak "s|window.HEATGRID_API_BASE_URL = \"\"|window.HEATGRID_API_BASE_URL = \"$API_URL\"|" index.html
+          if [ -n "$API_URL" ] && [ -f "build/index.html" ]; then
+            sed -i.bak "s|window.HEATGRID_API_BASE_URL = \"\"|window.HEATGRID_API_BASE_URL = \"$API_URL\"|" build/index.html
             echo "Injected HEATGRID_API_BASE_URL=$API_URL"
           fi
   artifacts:
