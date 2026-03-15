@@ -13,9 +13,11 @@ frontend:
             for d in heat-transfer-hack . ; do [ -d "$d/infrastructure" ] && REPO_ROOT="$d" && break; done
           fi
           cd "$REPO_ROOT"
+          chmod +x node_modules/.bin/* 2>/dev/null || true
           export CDK_DEFAULT_ACCOUNT="${AWS_ACCOUNT_ID:-$CDK_DEFAULT_ACCOUNT}"
           export CDK_DEFAULT_REGION="${AWS_REGION:-us-east-1}"
           cd infrastructure && npm install
+          chmod +x node_modules/.bin/* 2>/dev/null || true
           npx cdk bootstrap --force 2>/dev/null || true
           npx cdk deploy --require-approval never --outputs-file ../cdk-outputs.json
         # 2. Get API URL from stack output
@@ -37,6 +39,7 @@ frontend:
           REPO_ROOT="${CODEBUILD_SRC_DIR:-.}"
           [ -d "heat-transfer-hack/infrastructure" ] && REPO_ROOT="heat-transfer-hack"
           cd "$REPO_ROOT"
+          chmod +x node_modules/.bin/* 2>/dev/null || true
           export HEAT_SOURCES_TABLE=HeatSources
           export HEAT_CONSUMERS_TABLE=HeatConsumers
           export AWS_REGION=${AWS_REGION:-us-east-1}
