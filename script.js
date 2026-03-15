@@ -307,14 +307,14 @@ function updateMarkers() {
         }
         
         const popupContent = `
-            <div style="padding: 10px; min-width: 200px;">
-                <h3 style="margin: 0 0 10px 0; color: #ff4d4d;">🏭 ${source.name || 'Unnamed Source'}</h3>
+                <div style="padding: 10px; min-width: 200px;">
+                <h3 style="margin: 0 0 10px 0; color: #ff0000;">🏭 ${source.name || 'Unnamed Source'}</h3>
                 <p><strong>Industry:</strong> ${source.industry || 'Industrial'}</p>
                 <p><strong>Waste Heat:</strong> ${(source.estimatedWasteHeatMWhPerYear / 1000).toFixed(1)} GWh/year</p>
                 <p><strong>Recoverable:</strong> ${(source.recoverableHeatMWhPerYear / 1000).toFixed(1)} GWh/year</p>
                 <p><strong>Temperature:</strong> ${source.temperatureClass || 'medium'}</p>
                 <button onclick="window.selectSource('${source.id}')" 
-                    style="width:100%; padding:8px; background:#ff4d4d; color:white; border:none; border-radius:5px; cursor:pointer; margin-top:10px;">
+                    style="width:100%; padding:8px; background:#ff0000; color:white; border:none; border-radius:5px; cursor:pointer; margin-top:10px;">
                     <i class="fas fa-check"></i> Select This Source
                 </button>
             </div>
@@ -322,7 +322,7 @@ function updateMarkers() {
         
         const popup = new maplibregl.Popup({ offset: 25 }).setHTML(popupContent);
         
-        const marker = new maplibregl.Marker({ color: '#ff4d4d' })
+        const marker = new maplibregl.Marker({ color: '#ff0000' })
             .setLngLat([source.longitude, source.latitude])
             .setPopup(popup)
             .addTo(map);
@@ -339,12 +339,12 @@ function updateMarkers() {
         }
         
         const popupContent = `
-            <div style="padding: 10px; min-width: 200px;">
-                <h3 style="margin: 0 0 10px 0; color: #4d79ff;">🏢 ${consumer.name || 'Unnamed Consumer'}</h3>
+                <div style="padding: 10px; min-width: 200px;">
+                <h3 style="margin: 0 0 10px 0; color: #007bff;">🏢 ${consumer.name || 'Unnamed Consumer'}</h3>
                 <p><strong>Category:</strong> ${consumer.category || 'Building'}</p>
                 <p><strong>Heat Demand:</strong> ${(consumer.annualHeatDemandMWh / 1000).toFixed(1)} GWh/year</p>
                 <button onclick="window.selectConsumer('${consumer.id}')" 
-                    style="width:100%; padding:8px; background:#4d79ff; color:white; border:none; border-radius:5px; cursor:pointer; margin-top:10px;">
+                    style="width:100%; padding:8px; background:#007bff; color:white; border:none; border-radius:5px; cursor:pointer; margin-top:10px;">
                     <i class="fas fa-check"></i> Select This Consumer
                 </button>
             </div>
@@ -352,7 +352,7 @@ function updateMarkers() {
         
         const popup = new maplibregl.Popup({ offset: 25 }).setHTML(popupContent);
         
-        const marker = new maplibregl.Marker({ color: '#4d79ff' })
+        const marker = new maplibregl.Marker({ color: '#007bff' })
             .setLngLat([consumer.longitude, consumer.latitude])
             .setPopup(popup)
             .addTo(map);
@@ -377,6 +377,12 @@ function updateSelectors() {
             sourceSelect.innerHTML += `<option value="${source.id}">${source.name} (${(source.recoverableHeatMWhPerYear / 1000).toFixed(1)} GWh)</option>`;
         }
     });
+    // Mark as empty (placeholder shown) when no selection
+    if (sourceSelect.value === '' || !sourceSelect.value) {
+        sourceSelect.classList.add('empty');
+    } else {
+        sourceSelect.classList.remove('empty');
+    }
     
     // Update consumers dropdown
     consumerSelect.innerHTML = '<option value="">Select a consumer...</option>';
@@ -385,6 +391,12 @@ function updateSelectors() {
             consumerSelect.innerHTML += `<option value="${consumer.id}">${consumer.name} (${(consumer.annualHeatDemandMWh / 1000).toFixed(1)} GWh)</option>`;
         }
     });
+    // Mark as empty (placeholder shown) when no selection
+    if (consumerSelect.value === '' || !consumerSelect.value) {
+        consumerSelect.classList.add('empty');
+    } else {
+        consumerSelect.classList.remove('empty');
+    }
     
     // Enable/disable calculate button based on selections
     updateCalculateButton();
@@ -418,6 +430,8 @@ function setupEventListeners() {
             selectedSourceId = e.target.value;
             highlightSelected();
             updateCalculateButton();
+            // toggle empty class so placeholder shows as white background when no selection
+            if (e.target.value === '') e.target.classList.add('empty'); else e.target.classList.remove('empty');
             
             // Auto-open popup for selected source
             if (selectedSourceId) {
@@ -440,6 +454,8 @@ function setupEventListeners() {
                 const marker = consumerMarkers.find(m => m.id === selectedConsumerId);
                 if (marker) marker.marker.togglePopup();
             }
+            // toggle empty class so placeholder shows as white background when no selection
+            if (e.target.value === '') e.target.classList.add('empty'); else e.target.classList.remove('empty');
         });
     }
     
