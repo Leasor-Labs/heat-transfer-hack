@@ -1,10 +1,10 @@
 import type { HeatConsumer } from "../../shared/types";
 import {
-  searchPlacesByText,
+  searchPlacesByKeywords,
   isLocationServiceConfigured,
   TOLEDO_OHIO_BBOX,
 } from "./location-service";
-import type { PlaceResult } from "./location-service";
+import { searchTokens } from "./query-utils";
 
 const BASE_HEAT_DEMAND_MWH = 3000;
 
@@ -64,17 +64,6 @@ export const HEAT_CONSUMERS_OHIO: HeatConsumer[] = [
 ];
 
 /**
- * Extract meaningful location tokens from a search query (e.g. "Toledo, Oh" -> ["toledo", "oh"]).
- */
-function searchTokens(query: string): string[] {
-  return query
-    .trim()
-    .toLowerCase()
-    .split(/[\s,]+/)
-    .filter((t) => t.length > 0 && t !== "oh");
-}
-
-/**
  * Filter Ohio seed consumers by search query.
  * Matches if name or category contains any token (e.g. "Toledo, Oh" -> match "Toledo").
  */
@@ -92,23 +81,14 @@ function filterOhioConsumersByQuery(query: string): HeatConsumer[] {
 }
 
 /**
- * Fetch real Toledo heat consumers from AWS: one search per keyword, aggregate and dedupe by placeId.
+ * Fetch heat consumers from AWS Location Search (keywords + Toledo bbox, deduped).
  */
 async function getToledoHeatConsumersFromAWS(): Promise<HeatConsumer[]> {
-  const seen = new Set<string>();
-  const withKeyword: Array<{ place: PlaceResult; category: string }> = [];
-  for (const keyword of HEAT_CONSUMER_KEYWORDS) {
-    const places = await searchPlacesByText(keyword, {
-      maxResults: 5,
-      filterBBox: TOLEDO_OHIO_BBOX,
-    });
-    for (const p of places) {
-      if (seen.has(p.placeId)) continue;
-      seen.add(p.placeId);
-      withKeyword.push({ place: p, category: keyword });
-    }
-  }
-  return withKeyword.map(({ place: p, category }, i) => ({
+  const tagged = await searchPlacesByKeywords(HEAT_CONSUMER_KEYWORDS, {
+    maxResultsPerKeyword: 5,
+    filterBBox: TOLEDO_OHIO_BBOX,
+  });
+  return tagged.map(({ place: p, keyword: category }, i) => ({
     id: `location-consumer-${i}-${p.placeId}`,
     name: p.label || `Consumer site ${i + 1}`,
     category,
@@ -120,19 +100,21 @@ async function getToledoHeatConsumersFromAWS(): Promise<HeatConsumer[]> {
 
 /**
  * Returns heat consumers for the backend API.
- * Prefers Ohio seed data when it matches the query; falls back to AWS Location Service only when
- * the seed data has no matches for the search.
+ * Primary: AWS Location Search. Fallback: heat-consumers.ts seed data when AWS is unavailable or returns no results.
  */
 export async function getHeatConsumers(options?: {
   locationSearchQuery?: string;
 }): Promise<HeatConsumer[]> {
   const query = options?.locationSearchQuery?.trim() ?? "";
-  const seedResults = filterOhioConsumersByQuery(query);
-  if (seedResults.length > 0) return seedResults;
   if (isLocationServiceConfigured()) {
-    const toledoConsumers = await getToledoHeatConsumersFromAWS();
-    if (toledoConsumers.length > 0) return toledoConsumers;
+    try {
+      const awsConsumers = await getToledoHeatConsumersFromAWS();
+      if (awsConsumers.length > 0) return awsConsumers;
+    } catch {
+      // fall through to fallback
+    }
   }
+  const seedResults = filterOhioConsumersByQuery(query);
   return seedResults;
 }
 

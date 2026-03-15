@@ -132,3 +132,35 @@ export async function geocodeAddress(text: string): Promise<[number, number] | n
   const results = await searchPlacesByText(text, { maxResults: 1 });
   return results.length > 0 ? results[0].position : null;
 }
+
+/** Place result plus the keyword that matched it (for category/industry). */
+export type PlaceResultWithKeyword = { place: PlaceResult; keyword: string };
+
+/**
+ * Search for places by multiple keywords, aggregate and dedupe by placeId.
+ * Returns each place with the keyword that found it. Used by heat-sources and heat-consumers.
+ */
+export async function searchPlacesByKeywords(
+  keywords: readonly string[],
+  options?: {
+    maxResultsPerKeyword?: number;
+    filterBBox?: [number, number, number, number];
+  }
+): Promise<PlaceResultWithKeyword[]> {
+  if (!isLocationServiceConfigured() || keywords.length === 0) return [];
+  const seen = new Set<string>();
+  const results: PlaceResultWithKeyword[] = [];
+  const maxResults = options?.maxResultsPerKeyword ?? 5;
+  for (const keyword of keywords) {
+    const places = await searchPlacesByText(keyword, {
+      maxResults,
+      filterBBox: options?.filterBBox,
+    });
+    for (const p of places) {
+      if (seen.has(p.placeId)) continue;
+      seen.add(p.placeId);
+      results.push({ place: p, keyword });
+    }
+  }
+  return results;
+}
