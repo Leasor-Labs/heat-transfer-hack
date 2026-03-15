@@ -421,6 +421,62 @@ h1 {
     overflow-x: auto;
 }
 
+/* Nearby Locations widget (2 km range rankings, Best Score) */
+.nearby-locations-widget {
+    margin-top: 20px;
+}
+.nearby-locations-widget h3 .dot.yellow {
+    vertical-align: middle;
+    margin-right: 4px;
+}
+.nearby-locations-table-wrap {
+    overflow-x: auto;
+}
+.nearby-locations-widget .nearby-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: rgba(255,255,255,0.03);
+    border-radius: 10px;
+    overflow: hidden;
+}
+.nearby-locations-widget .nearby-table thead th {
+    padding: 10px 12px;
+    text-align: left;
+    font-weight: 600;
+    background: rgba(234,179,8,0.2);
+    color: var(--text);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.nearby-locations-widget .nearby-table tbody td {
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    color: var(--text);
+}
+.nearby-locations-widget .nearby-table tbody tr:hover {
+    background: rgba(234,179,8,0.06);
+}
+.nearby-locations-widget .nearby-table tbody td.loading {
+    text-align: center;
+    color: var(--muted);
+}
+.nearby-locations-widget .nearby-empty {
+    color: var(--muted);
+    font-size: 0.95rem;
+    margin-top: 12px;
+}
+.nearby-locations-widget .btn-small {
+    padding: 6px 12px;
+    font-size: 0.85rem;
+    border-radius: 6px;
+    cursor: pointer;
+    background: rgba(234,179,8,0.25);
+    color: var(--text);
+    border: 1px solid rgba(234,179,8,0.4);
+}
+.nearby-locations-widget .btn-small:hover {
+    background: rgba(234,179,8,0.35);
+}
+
 table {
     width: 100%;
     border-collapse: collapse;

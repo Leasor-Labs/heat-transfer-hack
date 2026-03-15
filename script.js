@@ -801,14 +801,20 @@ function updateRangeCircleAndHighlights() {
         loadRankedInRangeOpportunities({ consumerId: selectedConsumerId, sourceIds: inRangeOpposingSourceIds });
     } else {
         rankedInRangeOpportunities = [];
-        // Future Feature: displayInRangeRankings(rankedInRangeOpportunities);
+        displayNearbyRankings();
     }
 }
 
 // Load ranked opportunities for in-range opposing pairs (Best Score formula). Populates rankedInRangeOpportunities.
 async function loadRankedInRangeOpportunities(payload) {
-    if (!API_BASE_URL || !payload) {
+    if (!payload) {
         rankedInRangeOpportunities = [];
+        displayNearbyRankings();
+        return;
+    }
+    if (!API_BASE_URL) {
+        rankedInRangeOpportunities = [];
+        displayNearbyRankings();
         return;
     }
     try {
@@ -819,15 +825,85 @@ async function loadRankedInRangeOpportunities(payload) {
         });
         if (!res.ok) {
             rankedInRangeOpportunities = [];
+            displayNearbyRankings();
             return;
         }
         const data = await res.json();
         rankedInRangeOpportunities = data.rankings || [];
-        // Future Feature: displayInRangeRankings(rankedInRangeOpportunities);
+        displayNearbyRankings();
     } catch (e) {
         console.warn('Failed to load ranked opportunities in range', e);
         rankedInRangeOpportunities = [];
+        displayNearbyRankings();
     }
+}
+
+// Display the Nearby Locations widget: rankings of consumers (or sources) within 2 km, using Best Score from API (src/lib scoring).
+function displayNearbyRankings() {
+    const widget = document.getElementById('nearbyLocationsWidget');
+    const tbody = document.getElementById('nearbyLocationsBody');
+    const emptyEl = document.getElementById('nearbyLocationsEmpty');
+    const colLabel = document.getElementById('nearbyColLabel');
+    if (!widget || !tbody) return;
+
+    const hasSource = !!selectedSourceId;
+    const hasConsumer = !!selectedConsumerId;
+    const showConsumers = hasSource && (inRangeOpposingConsumerIds.length > 0 || rankedInRangeOpportunities.length > 0);
+    const showSources = hasConsumer && (inRangeOpposingSourceIds.length > 0 || rankedInRangeOpportunities.length > 0);
+
+    if (!hasSource && !hasConsumer) {
+        widget.style.display = 'none';
+        return;
+    }
+
+    widget.style.display = 'block';
+    if (colLabel) colLabel.textContent = hasSource ? 'Consumer' : 'Source';
+
+    if (!rankedInRangeOpportunities || rankedInRangeOpportunities.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="loading">No locations within 2 km. Select a different heat source or consumer.</td></tr>';
+        if (emptyEl) emptyEl.style.display = 'block';
+        return;
+    }
+    if (emptyEl) emptyEl.style.display = 'none';
+
+    let html = '';
+    rankedInRangeOpportunities.forEach((item) => {
+        const opp = item.opportunity;
+        const name = hasSource ? getConsumerName(opp.consumerId) : getSourceName(opp.sourceId);
+        const score = item.bestScore != null ? item.bestScore : (opp.feasibilityScore ?? 0);
+        const payback = opp.financialModel?.paybackYears ?? 0;
+        html += `
+            <tr onclick="selectFromNearby('${opp.sourceId}', '${opp.consumerId}')">
+                <td><strong>#${item.rank || 0}</strong></td>
+                <td>${name}</td>
+                <td>${(opp.distanceKm ?? 0).toFixed(1)} km</td>
+                <td><span class="score-badge">${Math.round(score)}</span></td>
+                <td>${payback.toFixed(1)} yrs</td>
+                <td><button class="btn-small" onclick="event.stopPropagation(); selectFromNearby('${opp.sourceId}', '${opp.consumerId}')"><i class="fas fa-eye"></i> View</button></td>
+            </tr>
+        `;
+    });
+    tbody.innerHTML = html;
+}
+
+// Select source + consumer from Nearby Locations row and run calculation
+function selectFromNearby(sourceId, consumerId) {
+    selectedSourceId = sourceId;
+    selectedConsumerId = consumerId;
+    const heatType1 = document.getElementById('heatType1');
+    const heatType2 = document.getElementById('heatType2');
+    const locationSelect1 = document.getElementById('locationSelect1');
+    const locationSelect2 = document.getElementById('locationSelect2');
+    if (heatType1) heatType1.value = 'Source';
+    if (heatType2) heatType2.value = 'Consumer';
+    if (locationSelect1) populateLocationSelect(locationSelect1, 'Source');
+    if (locationSelect2) populateLocationSelect(locationSelect2, 'Consumer');
+    if (locationSelect1) locationSelect1.value = sourceId;
+    if (locationSelect2) locationSelect2.value = consumerId;
+    if (typeof applySelectionFromDropdowns === 'function') applySelectionFromDropdowns();
+    highlightSelected();
+    updateCalculateButton();
+    calculateOpportunity();
 }
 
 // Highlight selected markers and opposing heat types within 2 km range

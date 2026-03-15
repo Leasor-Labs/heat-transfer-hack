@@ -162,6 +162,33 @@
             </table>
         </div> -->
 
+        <!-- Nearby Locations: rankings of consumers/sources within 2 km when a heat source or consumer is selected (Best Score from src/lib) -->
+        <div id="nearbyLocationsWidget" class="card nearby-locations-widget" style="display: none;">
+            <h3><i class="fas fa-map-marker-alt"></i> <span class="dot yellow"></span> Nearby Locations</h3>
+            <p class="hint" style="margin-bottom: 12px;">
+                <i class="fas fa-info-circle"></i>
+                Ranked by Best Score (distance, payback, savings, emissions). Within 2 km of selected marker.
+            </p>
+            <div class="nearby-locations-table-wrap">
+                <table class="nearby-table">
+                    <thead>
+                        <tr>
+                            <th>Rank</th>
+                            <th id="nearbyColLabel">Consumer</th>
+                            <th>Distance</th>
+                            <th>Best Score</th>
+                            <th>Payback</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="nearbyLocationsBody">
+                        <tr><td colspan="6" class="loading"><i class="fas fa-spinner fa-spin"></i> Loading nearby locations...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p id="nearbyLocationsEmpty" class="nearby-empty" style="display: none;">No locations within 2 km. Select a different heat source or consumer.</p>
+        </div>
+
         <!-- Footer -->
         <div style="text-align: center; padding: 20px; color: #6c757d;">
             <p style="font-size: 0.9em; margin-top: 10px;">
