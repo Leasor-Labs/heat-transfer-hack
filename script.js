@@ -19,6 +19,25 @@ const OHIO_HEAT_CONSUMERS_FALLBACK = [
   { id: "ohio-consumer-5", name: "Akron Food Processing Plant", category: "Food Processing", latitude: 41.0865, longitude: -81.523, annualHeatDemandMWh: 4000 }
 ];
 
+// Same token logic as backend: "Toledo, Oh" -> ["toledo"], filter by name/industry/category
+function searchTokens(query) {
+  return (query || '').trim().toLowerCase().split(/[\s,]+/).filter(function(t) { return t.length > 0 && t !== 'oh'; });
+}
+function filterOhioSourcesByQuery(query) {
+  var tokens = searchTokens(query);
+  if (tokens.length === 0 || (tokens.length === 1 && tokens[0] === 'ohio')) return OHIO_HEAT_SOURCES_FALLBACK.slice();
+  return OHIO_HEAT_SOURCES_FALLBACK.filter(function(s) {
+    return tokens.some(function(t) { return s.name.toLowerCase().includes(t) || s.industry.toLowerCase().includes(t); });
+  });
+}
+function filterOhioConsumersByQuery(query) {
+  var tokens = searchTokens(query);
+  if (tokens.length === 0 || (tokens.length === 1 && tokens[0] === 'ohio')) return OHIO_HEAT_CONSUMERS_FALLBACK.slice();
+  return OHIO_HEAT_CONSUMERS_FALLBACK.filter(function(c) {
+    return tokens.some(function(t) { return c.name.toLowerCase().includes(t) || c.category.toLowerCase().includes(t); });
+  });
+}
+
 // Global variables
 let map;
 let sources = [];
@@ -223,9 +242,9 @@ async function loadData(searchQuery = '') {
             console.warn('API not available for consumers');
         }
         
-        // Use API response only when request succeeded; if failed or empty, keep markers off
-        sources = sourcesResponse.ok ? (sourcesData.heatSources || []) : [];
-        consumers = consumersResponse.ok ? (consumersData.heatConsumers || []) : [];
+        // Use API response when request succeeded; if failed, use client-side filtered fallback so e.g. "Toledo" still shows
+        sources = sourcesResponse.ok ? (sourcesData.heatSources || []) : (searchQuery ? filterOhioSourcesByQuery(searchQuery) : []);
+        consumers = consumersResponse.ok ? (consumersData.heatConsumers || []) : (searchQuery ? filterOhioConsumersByQuery(searchQuery) : []);
         
         console.log(`Loaded ${sources.length} sources, ${consumers.length} consumers`);
         
@@ -241,17 +260,27 @@ async function loadData(searchQuery = '') {
             showError('rankingsBody', 'No heat sources or consumers found. Try a different search.');
         } else {
             hideSearchBanner();
+            if (mapInitialized && (sources.length > 0 || consumers.length > 0)) {
+                fitMarkersToBounds();
+            }
         }
         
     } catch (error) {
         console.error('Error loading data:', error);
-        sources = [];
-        consumers = [];
+        sources = searchQuery ? filterOhioSourcesByQuery(searchQuery) : [];
+        consumers = searchQuery ? filterOhioConsumersByQuery(searchQuery) : [];
         if (mapInitialized) updateMarkers();
         updateSelectors();
         updateMarkerCounts();
-        showSearchBanner('Search failed or returned no results. Try again or a different search.');
-        showError('rankingsBody', 'Search failed or returned no results. Try again or a different search.');
+        if (sources.length === 0 && consumers.length === 0) {
+            showSearchBanner('Search failed or returned no results. Try again or a different search.');
+            showError('rankingsBody', 'Search failed or returned no results. Try again or a different search.');
+        } else {
+            hideSearchBanner();
+            if (mapInitialized && (sources.length > 0 || consumers.length > 0)) {
+                fitMarkersToBounds();
+            }
+        }
     }
 }
 
@@ -499,7 +528,7 @@ function highlightSelected() {
     }
 }
 
-// Fit map to show all markers
+// Fit map to show all markers (or zoom to city when single point)
 function fitMarkersToBounds() {
     if (!map || !mapInitialized) return;
     
@@ -518,7 +547,15 @@ function fitMarkersToBounds() {
         bounds.extend(marker.getLngLat());
     });
     
-    map.fitBounds(bounds, { padding: 50, duration: 1000 });
+    // If single point, expand bounds slightly so map zooms to a reasonable city-level view
+    if (!bounds.getNorth() || bounds.getSouth() === bounds.getNorth()) {
+        const c = bounds.getCenter();
+        const pad = 0.02;
+        bounds.extend([c.lng - pad, c.lat - pad]);
+        bounds.extend([c.lng + pad, c.lat + pad]);
+    }
+    
+    map.fitBounds(bounds, { padding: 50, duration: 1000, maxZoom: 14 });
 }
 
 // Calculate opportunity for selected source and consumer
