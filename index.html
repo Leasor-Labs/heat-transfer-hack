@@ -50,7 +50,7 @@
         <!-- Search & Map (same width) -->
         <div class="search-and-map-wrap">
         <div class="card search-section">
-            <h3><i class="fas fa-search"></i> Find Heat Sources & Demands</h3>
+            <h3><i class="fas fa-search"></i> Find Heat Sources & Consumers</h3>
             <div class="search-box">
                 <div class="autocomplete-wrap">
                     <input type="text" id="locationSearch" placeholder="Enter city, region or Address. (e.g., Toledo, OH)" value="" autocomplete="off">
@@ -72,6 +72,7 @@
                 <div class="legend">
                     <span><span class="dot red"></span> Heat Sources (Industrial)</span>
                     <span><span class="dot blue"></span> Heat Consumers (Buildings)</span>
+                    <span><span class="dot yellow"></span> 2 km Range</span>
                 </div>
             </div>
             <div id="map" style="height: 500px; min-height: 400px; background: #e9ecef; border-radius: 10px;"></div>
@@ -85,8 +86,6 @@
             </div>
         </div>
         </div>
-
-
 
         <!-- Results Section (Hidden by default) -->
         <div id="resultsSection" class="card" style="display: none;">
@@ -136,8 +135,8 @@
             </div>
         </div>
 
-        <!-- Rankings Section -->
-        <div class="card rankings-section" style="display: none;">
+        <!-- Future Feature: Rankings Section -->
+        <!-- <div class="card rankings-section" style="display: none;">
             <h3><i class="fas fa-list-ol"></i> Top Ranked Opportunities</h3>
             <p class="hint" style="margin-bottom: 15px; color: white;">
                 <i class="fas fa-info-circle"></i> 
@@ -161,6 +160,29 @@
                     </td></tr>
                 </tbody>
             </table>
+        </div> -->
+
+        <!-- Nearby Locations: rankings of consumers/sources within 2 km when a heat source or consumer is selected (Best Score from src/lib) -->
+        <div id="nearbyLocationsWidget" class="card nearby-locations-widget" style="display: none;">
+            <h3><i class="fas fa-map-marker-alt"></i> <span class="dot yellow"></span> Comparing Nearby Consumers/Sources</h3>
+            <div class="nearby-locations-table-wrap">
+                <table class="nearby-table">
+                    <thead>
+                        <tr>
+                            <th>Rank</th>
+                            <th id="nearbyColLabel">Consumer</th>
+                            <th>Distance</th>
+                            <th>Best Score</th>
+                            <th>Payback</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="nearbyLocationsBody">
+                        <tr><td colspan="6" class="loading"><i class="fas fa-spinner fa-spin"></i> Loading nearby locations...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p id="nearbyLocationsEmpty" class="nearby-empty" style="display: none;">No locations within 2 km. Select a different heat source or consumer.</p>
         </div>
 
         <!-- Footer -->

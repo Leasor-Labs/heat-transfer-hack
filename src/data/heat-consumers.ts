@@ -1,5 +1,7 @@
+import type { GetHeatConsumersResponse } from "../../shared/api-contract";
 import type { HeatConsumer } from "../../shared/types";
 import {
+  searchPlacesByText,
   searchPlacesByKeywords,
   isLocationServiceConfigured,
   TOLEDO_OHIO_BBOX,
@@ -10,82 +12,11 @@ import {
   fetchHeatConsumersFromDynamo,
   fetchHeatConsumerByIdFromDynamo,
 } from "../api/dynamo-heat-consumers";
-import { searchTokens } from "./query-utils";
 import { haversineDistanceKm } from "../lib/calculations/distance";
+import { HEAT_CONSUMER_KEYWORDS } from "./search-keywords";
+import { FALLBACK_HEAT_CONSUMERS } from "./fallback-seed-data";
 
 const BASE_HEAT_DEMAND_MWH = 3000;
-
-/** Search phrases for heat consumers in Toledo, OH (AWS Location Service). Exported for tags API. */
-export const HEAT_CONSUMER_KEYWORDS = [
-  "Greenhouses",
-  "Warehouses",
-  "Food Processing",
-  "Laundry",
-] as const;
-
-/**
- * Ohio heat consumers seed data. Coordinates can be populated or refreshed
- * using Amazon Location Service (searchPlacesByText / geocodeAddress).
- */
-export const HEAT_CONSUMERS_OHIO: HeatConsumer[] = [
-  {
-    id: "ohio-consumer-1",
-    name: "Cleveland District Heating Network",
-    category: "District Heating",
-    latitude: 41.5052,
-    longitude: -81.6934,
-    annualHeatDemandMWh: 15000,
-  },
-  {
-    id: "ohio-consumer-2",
-    name: "Columbus Hospital Complex",
-    category: "Healthcare",
-    latitude: 39.9652,
-    longitude: -83.0008,
-    annualHeatDemandMWh: 8000,
-  },
-  {
-    id: "ohio-consumer-3",
-    name: "Cincinnati Apartment Complex",
-    category: "Residential",
-    latitude: 39.1105,
-    longitude: -84.505,
-    annualHeatDemandMWh: 3000,
-  },
-  {
-    id: "ohio-consumer-4",
-    name: "Toledo Greenhouse Facility",
-    category: "Agriculture",
-    latitude: 41.6588,
-    longitude: -83.5418,
-    annualHeatDemandMWh: 5000,
-  },
-  {
-    id: "ohio-consumer-5",
-    name: "Akron Food Processing Plant",
-    category: "Food Processing",
-    latitude: 41.0865,
-    longitude: -81.523,
-    annualHeatDemandMWh: 4000,
-  },
-];
-
-/**
- * Filter Ohio seed consumers by search query.
- * Matches if name or category contains any token (e.g. "Toledo, Oh" -> match "Toledo").
- */
-function filterOhioConsumersByQuery(query: string): HeatConsumer[] {
-  const tokens = searchTokens(query);
-  if (tokens.length === 0 || (tokens.length === 1 && tokens[0] === "ohio"))
-    return [...HEAT_CONSUMERS_OHIO];
-  const nameLower = (c: HeatConsumer) => c.name.toLowerCase();
-  const categoryLower = (c: HeatConsumer) => c.category.toLowerCase();
-  return HEAT_CONSUMERS_OHIO.filter((c) =>
-    tokens.some(
-      (t) => nameLower(c).includes(t) || categoryLower(c).includes(t)
-    )
-  );
-}
 
 /**
  * Fetch heat consumers from AWS Location Search (keywords + Toledo bbox, deduped).
@@ -123,43 +54,108 @@ function filterConsumersByDistance(
   });
 }
 
-/**
- * Returns heat consumers for the backend API.
- * When DynamoDB is configured (HEAT_CONSUMERS_TABLE), uses DynamoDB unless
- * Location search is requested and configured. Otherwise returns Ohio seed data.
- */
-export async function getHeatConsumers(options?: {
-  locationSearchQuery?: string;
-}): Promise<HeatConsumer[]> {
-  const query = options?.locationSearchQuery?.trim() ?? "";
+/** Convert AWS Location place results to HeatConsumer with default demand. */
+function placesToHeatConsumers(
+  places: Array<{ placeId: string; label: string; position: [number, number] }>,
+  category = "Building"
+): HeatConsumer[] {
+  return places.map((p, i) => ({
+    id: `location-consumer-${i}-${p.placeId}`,
+    name: p.label || `Consumer site ${i + 1}`,
+    category,
+    latitude: p.position[1],
+    longitude: p.position[0],
+    annualHeatDemandMWh: BASE_HEAT_DEMAND_MWH,
+  }));
+}
 
-  if (query && isLocationServiceConfigured()) {
-    const coords = await geocodeAddress(query);
-    if (coords) {
-      const [lng, lat] = coords;
-      let candidates: HeatConsumer[];
-      try {
-        const aws = await getToledoHeatConsumersFromAWS();
-        candidates = aws.length > 0 ? aws : [...HEAT_CONSUMERS_OHIO];
-      } catch {
-        candidates = [...HEAT_CONSUMERS_OHIO];
+/** Filter backup heat consumers by keyword (name or category). */
+function filterFallbackConsumersByKeyword(
+  keyword: string,
+  list: HeatConsumer[] = FALLBACK_HEAT_CONSUMERS
+): HeatConsumer[] {
+  const k = keyword.trim().toLowerCase();
+  if (!k) return list;
+  return list.filter(
+    (c) =>
+      (c.name && c.name.toLowerCase().includes(k)) ||
+      (c.category && c.category.toLowerCase().includes(k))
+  );
+}
+
+async function getHeatConsumersFromDynamoOrFallback(
+  query: string | undefined
+): Promise<HeatConsumer[]> {
+  if (HEAT_CONSUMERS_TABLE) {
+    try {
+      const fromDynamo = await fetchHeatConsumersFromDynamo();
+      if (fromDynamo.length > 0) {
+        return fromDynamo;
       }
-      return filterConsumersByDistance(candidates, lat, lng, ADDRESS_SEARCH_RADIUS_KM);
+    } catch {
+      // ignore and fall through to in-memory fallback
     }
   }
-  if (HEAT_CONSUMERS_TABLE) {
-    return fetchHeatConsumersFromDynamo();
-  }
-  return [...HEAT_CONSUMERS_OHIO];
+  return query ? filterFallbackConsumersByKeyword(query) : FALLBACK_HEAT_CONSUMERS;
 }
 
 /**
- * Resolve a single heat consumer by id. Uses DynamoDB when configured, else Ohio seed.
+ * Returns heat consumers for the backend API.
+ * When search query is present and AWS Location is configured: searches places by keyword;
+ * on communication failure returns errorCode 25. When AWS is not configured, filters backup data by keyword.
+ */
+export async function getHeatConsumers(options?: {
+  locationSearchQuery?: string;
+}): Promise<GetHeatConsumersResponse> {
+  const query = options?.locationSearchQuery?.trim() ?? "";
+
+  if (query && isLocationServiceConfigured()) {
+    try {
+      const places = await searchPlacesByText(query, {
+        maxResults: 20,
+        filterBBox: TOLEDO_OHIO_BBOX,
+      });
+      if (places.length > 0) {
+        const heatConsumers = placesToHeatConsumers(places, query);
+        return { heatConsumers };
+      }
+      const coords = await geocodeAddress(query);
+      if (coords) {
+        const aws = await getToledoHeatConsumersFromAWS();
+        const candidates =
+          aws.length > 0
+            ? aws
+            : HEAT_CONSUMERS_TABLE
+              ? await fetchHeatConsumersFromDynamo()
+              : [];
+        const heatConsumers = filterConsumersByDistance(
+          candidates,
+          coords[1],
+          coords[0],
+          ADDRESS_SEARCH_RADIUS_KM
+        );
+        return { heatConsumers };
+      }
+      return { heatConsumers: [] };
+    } catch {
+      const heatConsumers = await getHeatConsumersFromDynamoOrFallback(query);
+      return { heatConsumers, errorCode: 25 };
+    }
+  }
+
+  if (query && !isLocationServiceConfigured()) {
+    const heatConsumers = filterFallbackConsumersByKeyword(query);
+    return { heatConsumers };
+  }
+
+  const heatConsumers = await getHeatConsumersFromDynamoOrFallback(undefined);
+  return { heatConsumers };
+}
+
+/**
+ * Resolve a single heat consumer by id. Uses DynamoDB when configured; no table => null.
  */
 export async function getHeatConsumerById(id: string): Promise<HeatConsumer | null> {
-  if (HEAT_CONSUMERS_TABLE) {
-    const fromDynamo = await fetchHeatConsumerByIdFromDynamo(id);
-    if (fromDynamo) return fromDynamo;
-  }
-  return HEAT_CONSUMERS_OHIO.find((c) => c.id === id) ?? null;
+  if (!HEAT_CONSUMERS_TABLE) return null;
+  return fetchHeatConsumerByIdFromDynamo(id);
 }

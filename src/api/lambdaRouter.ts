@@ -7,9 +7,10 @@ import { handler as getHeatConsumers } from "./getHeatConsumers";
 import { handler as getHeatSourceById } from "./getHeatSourceById";
 import { handler as getHeatConsumerById } from "./getHeatConsumerById";
 import { handler as evaluateOpportunity } from "./evaluateOpportunityLambda";
-import { handler as rankedOpportunities } from "./rankedOpportunitiesLambda";
+// Future Feature: import { handler as rankedOpportunities } from "./rankedOpportunitiesLambda";
 import { handler as health } from "./healthLambda";
 import { handler as mapStyle } from "./mapStyleLambda";
+import { handler as refreshSeedFromLocation } from "./refreshSeedFromLocationLambda";
 
 type ApiGatewayEvent = {
   path?: string;
@@ -77,14 +78,17 @@ export async function handler(event: ApiGatewayEvent): Promise<LambdaResponse> {
     if (normalizedPath === "/api/evaluate-opportunity" && method === "POST") {
       return await evaluateOpportunity(eventWithParams);
     }
-    if (normalizedPath === "/api/ranked-opportunities" && method === "GET") {
-      return await rankedOpportunities(eventWithParams);
-    }
+    // Future Feature: if (normalizedPath === "/api/ranked-opportunities" && method === "GET") {
+    //   return await rankedOpportunities(eventWithParams);
+    // }
     if (normalizedPath === "/api/health" && method === "GET") {
       return await health();
     }
     if (normalizedPath === "/api/map-style" && method === "GET") {
       return await mapStyle();
+    }
+    if (normalizedPath === "/api/refresh-seed-from-location" && method === "GET") {
+      return await refreshSeedFromLocation();
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal server error";

@@ -2,6 +2,7 @@
  * HTTP server that exposes the backend API for the HeatGrid frontend.
  * Serves API routes and optionally static files (index.html, script.js, styles.css).
  * Run: npm run dev then open http://localhost:3000
+ * .env is loaded via the npm script preload (scripts/dotenv-preload.cjs).
  */
 /// <reference path="../shared/node-path.d.ts" />
 /// <reference path="../shared/express.d.ts" />
@@ -11,10 +12,14 @@ import {
   handleGetHeatSources,
   handleGetHeatConsumers,
   handleEvaluateOpportunity,
-  handleGetRankedOpportunities,
+  handleRankedOpportunitiesInRange,
+  // Future Feature: handleGetRankedOpportunities,
   handleGetTags,
 } from "./api";
+import type { RankedOpportunitiesInRangeRequest } from "../shared/api-contract";
 import { getDynamoStatus } from "./api/dynamo-status";
+import { refreshDynamoFromLocationService } from "./data/build-seed-from-location-service";
+import { geocodeAddress } from "./data/location-service";
 
 declare const process: { env: Record<string, string | undefined> };
 declare const __dirname: string;
@@ -40,6 +45,23 @@ app.use(express.json());
 app.get("/api/heat-sources", async (req, res) => {
   try {
     const locationSearchQuery = req.query.locationSearchQuery as string | undefined;
+    if (locationSearchQuery?.trim()) {
+      // #region agent log
+      fetch('http://127.0.0.1:7528/ingest/59cacce0-7747-4658-a89b-976b0f7d76a2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'e1f167'},body:JSON.stringify({sessionId:'e1f167',location:'server.ts:46',message:'trigger refresh',data:{locationSearchQuery:locationSearchQuery?.trim()},timestamp:Date.now(),hypothesisId:'H5'})}).catch(()=>{});
+      // #endregion
+      refreshDynamoFromLocationService()
+        .then((result) => {
+          // #region agent log
+          fetch('http://127.0.0.1:7528/ingest/59cacce0-7747-4658-a89b-976b0f7d76a2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'e1f167'},body:JSON.stringify({sessionId:'e1f167',location:'server.ts:52',message:'refresh completed',data:result,timestamp:Date.now(),hypothesisId:'H5'})}).catch(()=>{});
+          // #endregion
+        })
+        .catch((err) => {
+          // #region agent log
+          fetch('http://127.0.0.1:7528/ingest/59cacce0-7747-4658-a89b-976b0f7d76a2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'e1f167'},body:JSON.stringify({sessionId:'e1f167',location:'server.ts:56',message:'refresh failed',data:{error:String(err?.message||err)},timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
+          // #endregion
+          console.error("Refresh seed from location failed", err);
+        });
+    }
     const data = await handleGetHeatSources({ locationSearchQuery });
     res.json(data);
   } catch (err) {
@@ -51,6 +73,11 @@ app.get("/api/heat-sources", async (req, res) => {
 app.get("/api/heat-consumers", async (req, res) => {
   try {
     const locationSearchQuery = req.query.locationSearchQuery as string | undefined;
+    if (locationSearchQuery?.trim()) {
+      refreshDynamoFromLocationService().catch((err) =>
+        console.error("Refresh seed from location failed", err)
+      );
+    }
     const data = await handleGetHeatConsumers({ locationSearchQuery });
     res.json(data);
   } catch (err) {
@@ -74,13 +101,57 @@ app.post("/api/evaluate-opportunity", async (req, res) => {
   }
 });
 
-app.get("/api/ranked-opportunities", async (_req, res) => {
+app.post("/api/ranked-opportunities-in-range", async (req, res) => {
   try {
-    const data = await handleGetRankedOpportunities();
+    const body = req.body as RankedOpportunitiesInRangeRequest;
+    const data = await handleRankedOpportunitiesInRange(body);
     res.json(data);
   } catch (err) {
-    console.error("GET /api/ranked-opportunities", err);
-    res.status(500).json({ error: "Failed to fetch ranked opportunities" });
+    console.error("POST /api/ranked-opportunities-in-range", err);
+    res.status(500).json({ error: "Failed to fetch ranked opportunities in range" });
+  }
+});
+
+// Geocode a location string via AWS Location Service; returns { longitude, latitude } for map zoom.
+app.get("/api/geocode", async (req, res) => {
+  try {
+    const q = (req.query.q ?? req.query.query ?? "").toString().trim();
+    if (!q) {
+      res.status(400).json({ error: "Missing query parameter q" });
+      return;
+    }
+    const position = await geocodeAddress(q);
+    if (!position) {
+      res.status(404).json({ error: "Location not found" });
+      return;
+    }
+    const [longitude, latitude] = position;
+    res.json({ longitude, latitude });
+  } catch (err) {
+    console.error("GET /api/geocode", err);
+    res.status(500).json({ error: "Failed to geocode" });
+  }
+});
+
+// Future Feature: ranked-opportunities API
+// app.get("/api/ranked-opportunities", async (_req, res) => {
+//   try {
+//     const data = await handleGetRankedOpportunities();
+//     res.json(data);
+//   } catch (err) {
+//     console.error("GET /api/ranked-opportunities", err);
+//     res.status(500).json({ error: "Failed to fetch ranked opportunities" });
+//   }
+// });
+
+// Refresh DynamoDB from AWS Location Service (keywords). Called on page load and when search is used.
+app.get("/api/refresh-seed-from-location", async (_req, res) => {
+  try {
+    const result = await refreshDynamoFromLocationService();
+    res.json({ ok: true, sourcesWritten: result.sourcesWritten, consumersWritten: result.consumersWritten });
+  } catch (err) {
+    console.error("GET /api/refresh-seed-from-location", err);
+    res.status(500).json({ ok: false, error: err instanceof Error ? err.message : "Internal server error" });
   }
 });
 

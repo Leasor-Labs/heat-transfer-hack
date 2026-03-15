@@ -31,8 +31,18 @@ let lastOpenSourcePopup = null;
 let lastOpenConsumerPopup = null;
 let currentRouteLayer = null;
 let currentOpportunity = null;
-let allRankings = [];
+// Future Feature: let allRankings = [];
 let mapInitialized = false;
+
+// 2 km range circle: opposing heat types within this radius are highlighted
+const RANGE_RADIUS_KM = 2;
+const RANGE_CIRCLE_SOURCE_ID = 'range-circle-source';
+const RANGE_CIRCLE_LAYER_ID = 'range-circle-layer';
+let inRangeOpposingSourceIds = [];
+let inRangeOpposingConsumerIds = [];
+
+// Ranked list of in-range opposing pairs by Best Score (from API formula). Future Feature: display in rankings section.
+let rankedInRangeOpportunities = [];
 
 // All tags from database (industries + categories) for search autocomplete
 let allTags = { industries: [], categories: [] };
@@ -46,6 +56,32 @@ const LOCATION_SUGGESTIONS_STATIC = [
 
 // Autocomplete: city, region, or address only (no industry/category/site)
 const SUGGESTION_TYPE = { location: 'location' };
+
+// Haversine distance in km (for range circle and opposing-type filter)
+function haversineKm(lat1, lon1, lat2, lon2) {
+    const R = 6371;
+    const toRad = (d) => d * Math.PI / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2)**2;
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+}
+
+// GeoJSON Polygon coordinates for a circle (closed ring: first point = last point)
+function getCirclePolygon(centerLat, centerLng, radiusKm) {
+    const points = 64;
+    const coords = [];
+    const latDegPerKm = 1 / 111;
+    const lngDegPerKm = 1 / (111 * Math.cos(centerLat * Math.PI / 180));
+    for (let i = 0; i <= points; i++) {
+        const angle = (2 * Math.PI * i) / points;
+        const lat = centerLat + radiusKm * latDegPerKm * Math.cos(angle);
+        const lng = centerLng + radiusKm * lngDegPerKm * Math.sin(angle);
+        coords.push([lng, lat]);
+    }
+    return coords;
+}
 
 function getLocationSuggestions(query) {
     const q = (query || '').trim().toLowerCase();
@@ -128,23 +164,23 @@ async function fetchTags() {
 document.addEventListener('DOMContentLoaded', async () => {
     console.log('HeatGrid initializing...');
     
-    // Show loading states
-    showLoading('rankingsBody', 'Loading heat sources...');
-    document.getElementById('markerCounts').innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading...';
+    // Refresh DynamoDB from Location Service on page load (fire-and-forget)
+    if (API_BASE_URL) {
+        fetch(API_BASE_URL + '/api/refresh-seed-from-location').catch(() => {});
+    }
+    
+    // No initial data load — map loads with no markers until user searches
+    // Future Feature: showLoading('rankingsBody', 'Enter a location and click Search to load data.');
+    document.getElementById('markerCounts').innerHTML = '<i class="fas fa-map-marker-alt"></i> 0 sources, 0 consumers';
     
     // Fetch tags so search has access to all database tags
     await fetchTags();
     
-    // Initialize map with fallback
+    // Initialize map with fallback (no markers on first load)
     await initMap();
-    
-    // Load initial data (Ohio seed data)
-    await loadData();
     
     // Setup event listeners
     setupEventListeners();
-    
-    // Load rankings - removed to load only after calculate
 });
 
 // Show loading state helper
@@ -274,10 +310,19 @@ async function initMap() {
     }
 }
 
-// Load data from backend
+// Zoom level when flying to a geocoded location (no markers or before fitting to markers).
+const GEOCODE_ZOOM = 12;
+
+// Load data from backend; markers always reflect the search query (only API results for that query, or empty on error).
 async function loadData(searchQuery = '') {
+    const hadSearchQuery = (searchQuery || '').trim().length > 0;
+    if (hadSearchQuery) {
+        selectedSourceId = null;
+        selectedConsumerId = null;
+    }
+
     try {
-        showLoading('rankingsBody', 'Loading heat sources and consumers...');
+        // Future Feature: showLoading('rankingsBody', 'Loading heat sources and consumers...');
         
         let sourcesUrl = `${API_BASE_URL}/api/heat-sources`;
         let consumersUrl = `${API_BASE_URL}/api/heat-consumers`;
@@ -288,16 +333,40 @@ async function loadData(searchQuery = '') {
             console.log(`Searching for: ${searchQuery}`);
         }
         
-        // Fetch both in parallel with timeout
+        // Fetch geocode (for map zoom) and data in parallel with timeout
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
         
-        const [sourcesResponse, consumersResponse] = await Promise.all([
+        const geocodeUrl = searchQuery
+            ? `${API_BASE_URL}/api/geocode?q=${encodeURIComponent(searchQuery)}`
+            : null;
+        const geocodePromise = geocodeUrl
+            ? fetch(geocodeUrl, { signal: controller.signal }).catch(() => ({ ok: false }))
+            : Promise.resolve({ ok: false });
+        
+        const [sourcesResponse, consumersResponse, geocodeResponse] = await Promise.all([
             fetch(sourcesUrl, { signal: controller.signal }).catch(() => ({ ok: false, status: 404 })),
-            fetch(consumersUrl, { signal: controller.signal }).catch(() => ({ ok: false, status: 404 }))
+            fetch(consumersUrl, { signal: controller.signal }).catch(() => ({ ok: false, status: 404 })),
+            geocodePromise
         ]);
         
         clearTimeout(timeoutId);
+        
+        // Zoom map to geocoded position when a location was searched (AWS Location Services).
+        if (searchQuery && mapInitialized && map && geocodeResponse.ok && typeof geocodeResponse.json === 'function') {
+            try {
+                const geo = await geocodeResponse.json();
+                if (geo && typeof geo.longitude === 'number' && typeof geo.latitude === 'number') {
+                    map.flyTo({
+                        center: [geo.longitude, geo.latitude],
+                        zoom: GEOCODE_ZOOM,
+                        duration: 1200
+                    });
+                }
+            } catch (e) {
+                console.warn('Geocode response invalid, skipping zoom', e);
+            }
+        }
         
         // Handle responses with fallbacks
         let sourcesData = { heatSources: [] };
@@ -315,14 +384,18 @@ async function loadData(searchQuery = '') {
             console.warn('API not available for consumers, using Ohio seed fallback');
         }
         
-        const apiSources = (sourcesData.heatSources && sourcesData.heatSources.length) ? (sourcesData.heatSources || []) : [];
-        const apiConsumers = (consumersData.heatConsumers && consumersData.heatConsumers.length) ? (consumersData.heatConsumers || []) : [];
+        const apiSources = sourcesData.heatSources || [];
+        const apiConsumers = consumersData.heatConsumers || [];
         const searchWasUsed = searchQuery.length > 0;
+        const errorCode25 = (sourcesData.errorCode === 25) || (consumersData.errorCode === 25);
 
+        // Markers reflect the search: when a query was used, show only API results (never fallback).
         sources = searchWasUsed ? apiSources : (apiSources.length ? apiSources : OHIO_HEAT_SOURCES_FALLBACK);
         consumers = searchWasUsed ? apiConsumers : (apiConsumers.length ? apiConsumers : OHIO_HEAT_CONSUMERS_FALLBACK);
 
-        if (searchWasUsed && sources.length === 0 && consumers.length === 0) {
+        if (errorCode25) {
+            showSearchBanner('Error 25', true);
+        } else if (searchWasUsed && sources.length === 0 && consumers.length === 0) {
             showSearchBanner(searchQuery + ' not found', true);
         } else {
             showSearchBanner('', false);
@@ -344,18 +417,22 @@ async function loadData(searchQuery = '') {
         
         // Show message if no data
         if (sources.length === 0 && consumers.length === 0 && !searchWasUsed) {
-            showError('rankingsBody', 'No heat sources or consumers found. Try a different search.');
+            // Future Feature: showError('rankingsBody', 'No heat sources or consumers found. Try a different search.');
         }
         
     } catch (error) {
         console.error('Error loading data:', error);
-        sources = OHIO_HEAT_SOURCES_FALLBACK;
-        consumers = OHIO_HEAT_CONSUMERS_FALLBACK;
+        if (hadSearchQuery) {
+            sources = [];
+            consumers = [];
+        } else {
+            sources = OHIO_HEAT_SOURCES_FALLBACK;
+            consumers = OHIO_HEAT_CONSUMERS_FALLBACK;
+        }
         showSearchBanner('', false);
         if (mapInitialized) updateMarkers();
         updateSelectors();
         updateMarkerCounts();
-        showError('rankingsBody', 'Using Ohio seed data (API unavailable).');
     }
 }
 
@@ -435,7 +512,8 @@ function updateMarkers() {
             .addTo(map);
         consumerMarkers.push({ marker, id: consumer.id, data: consumer });
     });
-    
+
+    updateRangeCircleAndHighlights();
     console.log(`Added ${sourceMarkers.length} source markers, ${consumerMarkers.length} consumer markers`);
 }
 
@@ -511,7 +589,7 @@ function setupEventListeners() {
     if (sourceSelect) {
         sourceSelect.addEventListener('change', (e) => {
             selectedSourceId = e.target.value;
-            highlightSelected();
+            updateRangeCircleAndHighlights();
             updateCalculateButton();
             // toggle empty class so placeholder shows as white background when no selection
             if (e.target.value === '') e.target.classList.add('empty'); else e.target.classList.remove('empty');
@@ -542,7 +620,7 @@ function setupEventListeners() {
     if (consumerSelect) {
         consumerSelect.addEventListener('change', (e) => {
             selectedConsumerId = e.target.value;
-            highlightSelected();
+            updateRangeCircleAndHighlights();
             updateCalculateButton();
             
             // Auto-open popup for selected consumer
@@ -653,19 +731,198 @@ function updateCalculateButton() {
     }
 }
 
-// Highlight selected markers
+// Update 2 km range circle and which opposing markers are in range; then refresh highlights
+function updateRangeCircleAndHighlights() {
+    inRangeOpposingSourceIds = [];
+    inRangeOpposingConsumerIds = [];
+
+    let centerLat = null;
+    let centerLng = null;
+    let targetIsSource = false;
+
+    if (selectedSourceId) {
+        const src = sources.find(s => s.id === selectedSourceId);
+        if (src && typeof src.latitude === 'number' && typeof src.longitude === 'number') {
+            centerLat = src.latitude;
+            centerLng = src.longitude;
+            targetIsSource = true;
+        }
+    }
+    if (centerLat == null && selectedConsumerId) {
+        const con = consumers.find(c => c.id === selectedConsumerId);
+        if (con && typeof con.latitude === 'number' && typeof con.longitude === 'number') {
+            centerLat = con.latitude;
+            centerLng = con.longitude;
+            targetIsSource = false;
+        }
+    }
+
+    if (map && mapInitialized) {
+        if (map.getLayer(RANGE_CIRCLE_LAYER_ID)) map.removeLayer(RANGE_CIRCLE_LAYER_ID);
+        if (map.getSource(RANGE_CIRCLE_SOURCE_ID)) map.removeSource(RANGE_CIRCLE_SOURCE_ID);
+
+        if (centerLat != null && centerLng != null) {
+            const ring = getCirclePolygon(centerLat, centerLng, RANGE_RADIUS_KM);
+            map.addSource(RANGE_CIRCLE_SOURCE_ID, {
+                type: 'geojson',
+                data: {
+                    type: 'Feature',
+                    geometry: { type: 'Polygon', coordinates: [ring] }
+                }
+            });
+            map.addLayer({
+                id: RANGE_CIRCLE_LAYER_ID,
+                type: 'fill',
+                source: RANGE_CIRCLE_SOURCE_ID,
+                paint: {
+                    'fill-color': '#eab308',
+                    'fill-opacity': 0.4
+                }
+            });
+
+            if (targetIsSource) {
+                consumers.forEach(c => {
+                    if (c.latitude != null && c.longitude != null && haversineKm(centerLat, centerLng, c.latitude, c.longitude) <= RANGE_RADIUS_KM) {
+                        inRangeOpposingConsumerIds.push(c.id);
+                    }
+                });
+            } else {
+                sources.forEach(s => {
+                    if (s.latitude != null && s.longitude != null && haversineKm(centerLat, centerLng, s.latitude, s.longitude) <= RANGE_RADIUS_KM) {
+                        inRangeOpposingSourceIds.push(s.id);
+                    }
+                });
+            }
+        }
+    }
+
+    highlightSelected();
+
+    // Compile opposing heat types into a list and fetch Best Score rankings (Future Feature: display in rankings section)
+    if (inRangeOpposingConsumerIds.length > 0 && selectedSourceId) {
+        loadRankedInRangeOpportunities({ sourceId: selectedSourceId, consumerIds: inRangeOpposingConsumerIds });
+    } else if (inRangeOpposingSourceIds.length > 0 && selectedConsumerId) {
+        loadRankedInRangeOpportunities({ consumerId: selectedConsumerId, sourceIds: inRangeOpposingSourceIds });
+    } else {
+        rankedInRangeOpportunities = [];
+        displayNearbyRankings();
+    }
+}
+
+// Load ranked opportunities for in-range opposing pairs (Best Score formula). Populates rankedInRangeOpportunities.
+async function loadRankedInRangeOpportunities(payload) {
+    if (!payload) {
+        rankedInRangeOpportunities = [];
+        displayNearbyRankings();
+        return;
+    }
+    if (!API_BASE_URL) {
+        rankedInRangeOpportunities = [];
+        displayNearbyRankings();
+        return;
+    }
+    try {
+        const res = await fetch(`${API_BASE_URL}/api/ranked-opportunities-in-range`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (!res.ok) {
+            rankedInRangeOpportunities = [];
+            displayNearbyRankings();
+            return;
+        }
+        const data = await res.json();
+        rankedInRangeOpportunities = data.rankings || [];
+        displayNearbyRankings();
+    } catch (e) {
+        console.warn('Failed to load ranked opportunities in range', e);
+        rankedInRangeOpportunities = [];
+        displayNearbyRankings();
+    }
+}
+
+// Display the Nearby Locations widget: rankings of consumers (or sources) within 2 km, using Best Score from API (src/lib scoring).
+function displayNearbyRankings() {
+    const widget = document.getElementById('nearbyLocationsWidget');
+    const tbody = document.getElementById('nearbyLocationsBody');
+    const emptyEl = document.getElementById('nearbyLocationsEmpty');
+    const colLabel = document.getElementById('nearbyColLabel');
+    if (!widget || !tbody) return;
+
+    const hasSource = !!selectedSourceId;
+    const hasConsumer = !!selectedConsumerId;
+    const showConsumers = hasSource && (inRangeOpposingConsumerIds.length > 0 || rankedInRangeOpportunities.length > 0);
+    const showSources = hasConsumer && (inRangeOpposingSourceIds.length > 0 || rankedInRangeOpportunities.length > 0);
+
+    if (!hasSource && !hasConsumer) {
+        widget.style.display = 'none';
+        return;
+    }
+
+    widget.style.display = 'block';
+    if (colLabel) colLabel.textContent = hasSource ? 'Consumer' : 'Source';
+
+    if (!rankedInRangeOpportunities || rankedInRangeOpportunities.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="loading">No locations within 2 km. Select a different heat source or consumer.</td></tr>';
+        if (emptyEl) emptyEl.style.display = 'block';
+        return;
+    }
+    if (emptyEl) emptyEl.style.display = 'none';
+
+    let html = '';
+    rankedInRangeOpportunities.forEach((item) => {
+        const opp = item.opportunity;
+        const name = hasSource ? getConsumerName(opp.consumerId) : getSourceName(opp.sourceId);
+        const score = item.bestScore != null ? item.bestScore : (opp.feasibilityScore ?? 0);
+        const payback = opp.financialModel?.paybackYears ?? 0;
+        html += `
+            <tr onclick="selectFromNearby('${opp.sourceId}', '${opp.consumerId}')">
+                <td><strong>#${item.rank || 0}</strong></td>
+                <td>${name}</td>
+                <td>${(opp.distanceKm ?? 0).toFixed(1)} km</td>
+                <td><span class="score-badge">${Math.round(score)}</span></td>
+                <td>${payback.toFixed(1)} yrs</td>
+                <td><button class="btn-small" onclick="event.stopPropagation(); selectFromNearby('${opp.sourceId}', '${opp.consumerId}')"><i class="fas fa-eye"></i> View</button></td>
+            </tr>
+        `;
+    });
+    tbody.innerHTML = html;
+}
+
+// Select source + consumer from Nearby Locations row and run calculation
+function selectFromNearby(sourceId, consumerId) {
+    selectedSourceId = sourceId;
+    selectedConsumerId = consumerId;
+    const heatType1 = document.getElementById('heatType1');
+    const heatType2 = document.getElementById('heatType2');
+    const locationSelect1 = document.getElementById('locationSelect1');
+    const locationSelect2 = document.getElementById('locationSelect2');
+    if (heatType1) heatType1.value = 'Source';
+    if (heatType2) heatType2.value = 'Consumer';
+    if (locationSelect1) populateLocationSelect(locationSelect1, 'Source');
+    if (locationSelect2) populateLocationSelect(locationSelect2, 'Consumer');
+    if (locationSelect1) locationSelect1.value = sourceId;
+    if (locationSelect2) locationSelect2.value = consumerId;
+    if (typeof applySelectionFromDropdowns === 'function') applySelectionFromDropdowns();
+    highlightSelected();
+    updateCalculateButton();
+    calculateOpportunity();
+}
+
+// Highlight selected markers and opposing heat types within 2 km range
 function highlightSelected() {
-    // Reset all marker colors
+    // Reset all marker styles; all markers use 100% opacity
     sourceMarkers.forEach(({ marker }) => {
         marker.getElement().style.filter = 'none';
-        marker.getElement().style.opacity = '0.7';
+        marker.getElement().style.opacity = '1';
     });
     consumerMarkers.forEach(({ marker }) => {
         marker.getElement().style.filter = 'none';
-        marker.getElement().style.opacity = '0.7';
+        marker.getElement().style.opacity = '1';
     });
-    
-    // Highlight selected source
+
+    // Highlight selected source (gold)
     if (selectedSourceId) {
         const selected = sourceMarkers.find(m => m.id === selectedSourceId);
         if (selected) {
@@ -673,8 +930,8 @@ function highlightSelected() {
             selected.marker.getElement().style.opacity = '1';
         }
     }
-    
-    // Highlight selected consumer
+
+    // Highlight selected consumer (gold)
     if (selectedConsumerId) {
         const selected = consumerMarkers.find(m => m.id === selectedConsumerId);
         if (selected) {
@@ -682,6 +939,20 @@ function highlightSelected() {
             selected.marker.getElement().style.opacity = '1';
         }
     }
+
+    // Highlight opposing heat types within 2 km (yellow glow – Nearby Locations)
+    sourceMarkers.forEach(({ marker, id }) => {
+        if (inRangeOpposingSourceIds.indexOf(id) !== -1) {
+            marker.getElement().style.filter = 'drop-shadow(0 0 8px #eab308)';
+            marker.getElement().style.opacity = '1';
+        }
+    });
+    consumerMarkers.forEach(({ marker, id }) => {
+        if (inRangeOpposingConsumerIds.indexOf(id) !== -1) {
+            marker.getElement().style.filter = 'drop-shadow(0 0 8px #eab308)';
+            marker.getElement().style.opacity = '1';
+        }
+    });
 }
 
 // Fit map to show all active markers (zoom and pan with 2s animation)
@@ -773,13 +1044,13 @@ async function calculateOpportunity() {
             resultsSection.scrollIntoView({ behavior: 'smooth' });
         }
         
-        // Load and show rankings for the selected source
-        await loadRankings(selectedSourceId);
-        const rankingsSection = document.querySelector('.rankings-section');
-        if (rankingsSection) {
-            rankingsSection.style.display = 'block';
-            rankingsSection.scrollIntoView({ behavior: 'smooth' });
-        }
+        // Future Feature: Load and show rankings for the selected source
+        // await loadRankings(selectedSourceId);
+        // const rankingsSection = document.querySelector('.rankings-section');
+        // if (rankingsSection) {
+        //     rankingsSection.style.display = 'block';
+        //     rankingsSection.scrollIntoView({ behavior: 'smooth' });
+        // }
         
     } catch (error) {
         console.error('Error calculating opportunity:', error);
@@ -795,30 +1066,30 @@ async function calculateOpportunity() {
             resultsSection.scrollIntoView({ behavior: 'smooth' });
         }
         
-        // Load and show rankings for the selected source
-        await loadRankings(selectedSourceId);
-        const rankingsSection = document.querySelector('.rankings-section');
-        if (rankingsSection) {
-            rankingsSection.style.display = 'block';
-            rankingsSection.scrollIntoView({ behavior: 'smooth' });
-        }
+        // Future Feature: Load and show rankings for the selected source
+        // await loadRankings(selectedSourceId);
+        // const rankingsSection = document.querySelector('.rankings-section');
+        // if (rankingsSection) {
+        //     rankingsSection.style.display = 'block';
+        //     rankingsSection.scrollIntoView({ behavior: 'smooth' });
+        // }
         
     } finally {
         // Restore button
         calculateBtn.innerHTML = originalText;
         calculateBtn.disabled = false;
 
-        // Always attempt to load and show rankings (defensive — show UI even if calculation failed)
-        try {
-            await loadRankings(selectedSourceId);
-        } catch (e) {
-            console.warn('Failed to load rankings in finally:', e);
-        }
-        const rankingsSection = document.querySelector('.rankings-section');
-        if (rankingsSection) {
-            rankingsSection.style.display = 'block';
-            rankingsSection.scrollIntoView({ behavior: 'smooth' });
-        }
+        // Future Feature: Always attempt to load and show rankings
+        // try {
+        //     await loadRankings(selectedSourceId);
+        // } catch (e) {
+        //     console.warn('Failed to load rankings in finally:', e);
+        // }
+        // const rankingsSection = document.querySelector('.rankings-section');
+        // if (rankingsSection) {
+        //     rankingsSection.style.display = 'block';
+        //     rankingsSection.scrollIntoView({ behavior: 'smooth' });
+        // }
     }
 }
 
@@ -1100,27 +1371,22 @@ function createFinancialChart(initialCost, annualSavings) {
     });
 }
 
-// Load ranked opportunities
-async function loadRankings(sourceId = null) {
-    try {
-        const response = await fetch(`${API_BASE_URL}/api/ranked-opportunities`);
-        
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        
-        const data = await response.json();
-        allRankings = data.rankings || [];
-        displayRankings(allRankings, sourceId);
-        
-    } catch (error) {
-        console.error('Error loading rankings:', error);
-        showError('rankingsBody', 'Failed to load rankings. Using demo data.');
-        
-        // Create demo rankings
-        createDemoRankings(sourceId);
-    }
-}
+// Future Feature: Load ranked opportunities
+// async function loadRankings(sourceId = null) {
+//     try {
+//         const response = await fetch(`${API_BASE_URL}/api/ranked-opportunities`);
+//         if (!response.ok) {
+//             throw new Error(`HTTP error! status: ${response.status}`);
+//         }
+//         const data = await response.json();
+//         allRankings = data.rankings || [];
+//         displayRankings(allRankings, sourceId);
+//     } catch (error) {
+//         console.error('Error loading rankings:', error);
+//         showError('rankingsBody', 'Failed to load rankings. Using demo data.');
+//         createDemoRankings(sourceId);
+//     }
+// }
 
 // Create demo rankings for testing
 function createDemoRankings(sourceId = null) {
@@ -1219,21 +1485,18 @@ function getConsumerName(id) {
     return consumer ? consumer.name : 'Unknown Consumer';
 }
 
-// Select opportunity from rankings
-function selectOpportunity(sourceId, consumerId) {
-    selectedSourceId = sourceId;
-    selectedConsumerId = consumerId;
-    
-    const sourceSelect = document.getElementById('sourceSelect');
-    const consumerSelect = document.getElementById('consumerSelect');
-    
-    if (sourceSelect) sourceSelect.value = sourceId;
-    if (consumerSelect) consumerSelect.value = consumerId;
-    
-    highlightSelected();
-    updateCalculateButton();
-    calculateOpportunity();
-}
+// Future Feature: Select opportunity from rankings
+// function selectOpportunity(sourceId, consumerId) {
+//     selectedSourceId = sourceId;
+//     selectedConsumerId = consumerId;
+//     const sourceSelect = document.getElementById('sourceSelect');
+//     const consumerSelect = document.getElementById('consumerSelect');
+//     if (sourceSelect) sourceSelect.value = sourceId;
+//     if (consumerSelect) consumerSelect.value = consumerId;
+//     highlightSelected();
+//     updateCalculateButton();
+//     calculateOpportunity();
+// }
 
 // PDF generation
 function generatePdf() {
@@ -1257,7 +1520,7 @@ window.selectSource = function(id) {
     selectedSourceId = id;
     const sourceSelect = document.getElementById('sourceSelect');
     if (sourceSelect) sourceSelect.value = id;
-    highlightSelected();
+    updateRangeCircleAndHighlights();
     updateCalculateButton();
 };
 
@@ -1265,6 +1528,6 @@ window.selectConsumer = function(id) {
     selectedConsumerId = id;
     const consumerSelect = document.getElementById('consumerSelect');
     if (consumerSelect) consumerSelect.value = id;
-    highlightSelected();
+    updateRangeCircleAndHighlights();
     updateCalculateButton();
 };
