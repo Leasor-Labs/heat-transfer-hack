@@ -38,6 +38,24 @@ function filterOhioConsumersByQuery(query) {
   });
 }
 
+// Autocomplete: suggest cities/regions from Ohio seed data
+var SEARCH_SUGGESTIONS = (function() {
+  var cities = [];
+  OHIO_HEAT_SOURCES_FALLBACK.forEach(function(s) {
+    var name = s.name;
+    if (name.indexOf('Cleveland') !== -1) cities.push('Cleveland, OH');
+    else if (name.indexOf('Columbus') !== -1) cities.push('Columbus, OH');
+    else if (name.indexOf('Cincinnati') !== -1) cities.push('Cincinnati, OH');
+    else if (name.indexOf('Toledo') !== -1) cities.push('Toledo, OH');
+    else if (name.indexOf('Akron') !== -1) cities.push('Akron, OH');
+  });
+  var seen = {};
+  var out = [];
+  cities.forEach(function(c) { if (!seen[c]) { seen[c] = true; out.push(c); } });
+  out.push('Ohio');
+  return out;
+})();
+
 // Global variables
 let map;
 let sources = [];
@@ -397,8 +415,117 @@ function updateMarkerCounts() {
     }
 }
 
+// Autocomplete UI state
+var autocompleteListEl = null;
+var autocompleteActiveIndex = -1;
+
+function initSearchAutocomplete() {
+    const searchInput = document.getElementById('locationSearch');
+    autocompleteListEl = document.getElementById('autocompleteList');
+    if (!searchInput || !autocompleteListEl) return;
+
+    function filterSuggestions(query) {
+        var q = (query || '').trim().toLowerCase();
+        if (!q) return SEARCH_SUGGESTIONS.slice();
+        return SEARCH_SUGGESTIONS.filter(function(s) {
+            return s.toLowerCase().indexOf(q) !== -1;
+        });
+    }
+
+    function showSuggestions(suggestions) {
+        autocompleteActiveIndex = -1;
+        autocompleteListEl.innerHTML = '';
+        if (suggestions.length === 0) {
+            autocompleteListEl.setAttribute('aria-hidden', 'true');
+            autocompleteListEl.setAttribute('aria-expanded', 'false');
+            return;
+        }
+        suggestions.forEach(function(text, i) {
+            var li = document.createElement('li');
+            li.className = 'autocomplete-item';
+            li.setAttribute('role', 'option');
+            li.setAttribute('id', 'autocomplete-item-' + i);
+            li.textContent = text;
+            li.addEventListener('click', function() {
+                searchInput.value = text;
+                autocompleteListEl.setAttribute('aria-hidden', 'true');
+                autocompleteListEl.setAttribute('aria-expanded', 'false');
+                searchInput.focus();
+                document.getElementById('searchBtn')?.click();
+            });
+            autocompleteListEl.appendChild(li);
+        });
+        autocompleteListEl.setAttribute('aria-hidden', 'false');
+        autocompleteListEl.setAttribute('aria-expanded', 'true');
+    }
+
+    function hideSuggestions() {
+        autocompleteListEl.innerHTML = '';
+        autocompleteListEl.setAttribute('aria-hidden', 'true');
+        autocompleteListEl.setAttribute('aria-expanded', 'false');
+        autocompleteActiveIndex = -1;
+    }
+
+    function setActiveItem(index) {
+        var items = autocompleteListEl.querySelectorAll('.autocomplete-item');
+        items.forEach(function(item, i) { item.classList.toggle('active', i === index); });
+        autocompleteActiveIndex = index;
+        if (index >= 0 && items[index]) {
+            items[index].scrollIntoView({ block: 'nearest' });
+        }
+    }
+
+    searchInput.addEventListener('input', function() {
+        var suggestions = filterSuggestions(searchInput.value);
+        showSuggestions(suggestions);
+    });
+
+    searchInput.addEventListener('focus', function() {
+        var suggestions = filterSuggestions(searchInput.value);
+        showSuggestions(suggestions);
+    });
+
+    searchInput.addEventListener('keydown', function(e) {
+        var items = autocompleteListEl.querySelectorAll('.autocomplete-item');
+        var visible = autocompleteListEl.getAttribute('aria-hidden') !== 'true' && items.length > 0;
+
+        if (e.key === 'Escape') {
+            hideSuggestions();
+            return;
+        }
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (visible) {
+                var next = autocompleteActiveIndex < items.length - 1 ? autocompleteActiveIndex + 1 : 0;
+                setActiveItem(next);
+            }
+            return;
+        }
+        if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (visible) {
+                var prev = autocompleteActiveIndex <= 0 ? items.length - 1 : autocompleteActiveIndex - 1;
+                setActiveItem(prev);
+            }
+            return;
+        }
+        if (e.key === 'Enter' && visible && autocompleteActiveIndex >= 0 && items[autocompleteActiveIndex]) {
+            e.preventDefault();
+            items[autocompleteActiveIndex].click();
+            return;
+        }
+    });
+
+    document.addEventListener('click', function(e) {
+        var wrap = searchInput.closest('.autocomplete-wrap');
+        if (wrap && !wrap.contains(e.target)) hideSuggestions();
+    });
+}
+
 // Setup event listeners
 function setupEventListeners() {
+    initSearchAutocomplete();
+
     // Search button: blank = clear map; non-empty = load data and rankings
     const searchBtn = document.getElementById('searchBtn');
     if (searchBtn) {
