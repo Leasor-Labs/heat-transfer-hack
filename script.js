@@ -309,6 +309,9 @@ async function initMap() {
 // Zoom level when flying to a geocoded location (no markers or before fitting to markers).
 const GEOCODE_ZOOM = 12;
 
+// City of Toledo, Ohio center [lng, lat] for map centering when "Toledo" is searched (fallback if geocode unavailable).
+const TOLEDO_CENTER = [-83.5378, 41.6528];
+
 // Load data from backend; markers always reflect the search query (only API results for that query, or empty on error).
 async function loadData(searchQuery = '') {
     const hadSearchQuery = (searchQuery || '').trim().length > 0;
@@ -347,23 +350,34 @@ async function loadData(searchQuery = '') {
         ]);
         
         clearTimeout(timeoutId);
-        
-        // Zoom map to geocoded position when a location was searched (AWS Location Services).
-        if (searchQuery && mapInitialized && map && geocodeResponse.ok && typeof geocodeResponse.json === 'function') {
-            try {
-                const geo = await geocodeResponse.json();
-                if (geo && typeof geo.longitude === 'number' && typeof geo.latitude === 'number') {
-                    map.flyTo({
-                        center: [geo.longitude, geo.latitude],
-                        zoom: GEOCODE_ZOOM,
-                        duration: 1200
-                    });
+
+        // Resolve map center for search: when "Toledo" is searched, center on Toledo (fallback if geocode fails); otherwise use geocode result.
+        let searchCenter = null;
+        const queryLower = (searchQuery || '').trim().toLowerCase();
+        const isToledoSearch = queryLower.includes('toledo');
+        if (searchQuery && mapInitialized && map) {
+            if (geocodeResponse.ok && typeof geocodeResponse.json === 'function') {
+                try {
+                    const geo = await geocodeResponse.json();
+                    if (geo && typeof geo.longitude === 'number' && typeof geo.latitude === 'number') {
+                        searchCenter = [geo.longitude, geo.latitude];
+                    }
+                } catch (e) {
+                    console.warn('Geocode response invalid', e);
                 }
-            } catch (e) {
-                console.warn('Geocode response invalid, skipping zoom', e);
+            }
+            if (!searchCenter && isToledoSearch) {
+                searchCenter = TOLEDO_CENTER;
+            }
+            if (searchCenter) {
+                map.flyTo({
+                    center: searchCenter,
+                    zoom: GEOCODE_ZOOM,
+                    duration: 1200
+                });
             }
         }
-        
+
         // Handle responses with fallbacks
         let sourcesData = { heatSources: [] };
         let consumersData = { heatConsumers: [] };
@@ -400,11 +414,11 @@ async function loadData(searchQuery = '') {
         console.log(`Loaded ${sources.length} sources, ${consumers.length} consumers`);
         
         // When a location is searched and found: only markers that fit the search are in sources/consumers.
-        // updateMarkers() removes all existing markers and adds only these (removing any that don't fit).
-        // Then zoom and pan so the map fits all active markers.
+        // updateMarkers() removes all existing markers and adds only these.
+        // If we centered on the searched location (e.g. Toledo), keep that view; otherwise fit map to markers.
         if (mapInitialized) {
             updateMarkers();
-            if (sourceMarkers.length > 0 || consumerMarkers.length > 0) {
+            if (!searchCenter && sourceMarkers.length + consumerMarkers.length > 0) {
                 fitMarkersToBounds();
             }
         }
