@@ -10,6 +10,7 @@ import { handler as evaluateOpportunity } from "./evaluateOpportunityLambda";
 // Future Feature: import { handler as rankedOpportunities } from "./rankedOpportunitiesLambda";
 import { handler as health } from "./healthLambda";
 import { handler as mapStyle } from "./mapStyleLambda";
+import { handler as refreshSeedFromLocation } from "./refreshSeedFromLocationLambda";
 
 type ApiGatewayEvent = {
   path?: string;
@@ -85,6 +86,9 @@ export async function handler(event: ApiGatewayEvent): Promise<LambdaResponse> {
     }
     if (normalizedPath === "/api/map-style" && method === "GET") {
       return await mapStyle();
+    }
+    if (normalizedPath === "/api/refresh-seed-from-location" && method === "GET") {
+      return await refreshSeedFromLocation();
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal server error";
