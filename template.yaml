@@ -1,0 +1,160 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Heat Transfer API - DynamoDB, Lambda, API Gateway (no CDK)
+
+Parameters:
+  Stage:
+    Type: String
+    Default: dev
+
+Globals:
+  Api:
+    StageName: !Ref Stage
+    Cors:
+      AllowMethods: "'GET,OPTIONS'"
+      AllowHeaders: "'Content-Type,Authorization'"
+      AllowOrigin: "'*'"
+  Function:
+    Runtime: nodejs20.x
+    Timeout: 30
+    MemorySize: 256
+    Environment:
+      Variables:
+        HEAT_SOURCES_TABLE: !Ref HeatSourcesTable
+        HEAT_CONSUMERS_TABLE: !Ref HeatConsumersTable
+        AWS_NODEJS_CONNECTION_REUSE_ENABLED: '1'
+    Policies:
+      - DynamoDBCrudPolicy:
+          TableName: !Ref HeatSourcesTable
+      - DynamoDBCrudPolicy:
+          TableName: !Ref HeatConsumersTable
+
+Resources:
+  HeatSourcesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: HeatSources
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: industry
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: industry-index
+          KeySchema:
+            - AttributeName: industry
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+
+  HeatConsumersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: HeatConsumers
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: category
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: category-index
+          KeySchema:
+            - AttributeName: category
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+
+  GetHeatSourcesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: index.handler
+      Events:
+        GetHeatSources:
+          Type: Api
+          Properties:
+            Path: /api/heat-sources
+            Method: GET
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/api/getHeatSources.ts
+        Minify: true
+        Target: node20
+
+  GetHeatSourceByIdFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: index.handler
+      Events:
+        GetHeatSourceById:
+          Type: Api
+          Properties:
+            Path: /api/heat-sources/{id}
+            Method: GET
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/api/getHeatSourceById.ts
+        Minify: true
+        Target: node20
+
+  GetHeatConsumersFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: index.handler
+      Events:
+        GetHeatConsumers:
+          Type: Api
+          Properties:
+            Path: /api/heat-consumers
+            Method: GET
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/api/getHeatConsumers.ts
+        Minify: true
+        Target: node20
+
+  GetHeatConsumerByIdFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: index.handler
+      Events:
+        GetHeatConsumerById:
+          Type: Api
+          Properties:
+            Path: /api/heat-consumers/{id}
+            Method: GET
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/api/getHeatConsumerById.ts
+        Minify: true
+        Target: node20
+
+Outputs:
+  ApiUrl:
+    Description: Heat Transfer API base URL (no trailing slash)
+    Value: !Sub 'https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}'
+    Export:
+      Name: HeatTransferApiUrl
+  HeatSourcesTableName:
+    Value: !Ref HeatSourcesTable
+  HeatConsumersTableName:
+    Value: !Ref HeatConsumersTable

@@ -1,8 +1,0 @@
-{
-  "app": "node -r ts-node/register bin/app.ts",
-  "watch": {
-    "include": ["**"],
-    "exclude": ["node_modules", "dist", "*.js"]
-  },
-  "context": {}
-}
