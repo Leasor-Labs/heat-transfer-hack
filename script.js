@@ -794,11 +794,25 @@ function updateRangeCircleAndHighlights() {
 
     highlightSelected();
 
-    // Compile opposing heat types into a list and fetch Best Score rankings (Future Feature: display in rankings section)
+    // Compile opposing heat types into a list and fetch Best Score rankings.
+    // When a source is selected, send that source plus ALL consumers within 2 km.
+    // When a consumer is selected, send that consumer plus ALL sources within 2 km.
     if (inRangeOpposingConsumerIds.length > 0 && selectedSourceId) {
-        loadRankedInRangeOpportunities({ sourceId: selectedSourceId, consumerIds: inRangeOpposingConsumerIds });
+        const selectedSource = sources.find(s => s.id === selectedSourceId);
+        const inRangeConsumers = consumers.filter(c => inRangeOpposingConsumerIds.indexOf(c.id) !== -1);
+        loadRankedInRangeOpportunities(
+            selectedSource && inRangeConsumers.length
+                ? { source: selectedSource, consumers: inRangeConsumers }
+                : { sourceId: selectedSourceId, consumerIds: inRangeOpposingConsumerIds }
+        );
     } else if (inRangeOpposingSourceIds.length > 0 && selectedConsumerId) {
-        loadRankedInRangeOpportunities({ consumerId: selectedConsumerId, sourceIds: inRangeOpposingSourceIds });
+        const selectedConsumer = consumers.find(c => c.id === selectedConsumerId);
+        const inRangeSources = sources.filter(s => inRangeOpposingSourceIds.indexOf(s.id) !== -1);
+        loadRankedInRangeOpportunities(
+            selectedConsumer && inRangeSources.length
+                ? { consumer: selectedConsumer, sources: inRangeSources }
+                : { consumerId: selectedConsumerId, sourceIds: inRangeOpposingSourceIds }
+        );
     } else {
         rankedInRangeOpportunities = [];
         displayNearbyRankings();
