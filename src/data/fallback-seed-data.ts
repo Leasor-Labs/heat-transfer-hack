@@ -1121,16 +1121,14 @@ const FALLBACK_HEAT_SOURCES_BASE: HeatSource[] = [
 
 ];
 
-/** Heat sources for fallback (expanded to ~100 synthetic entries). */
+/** Heat sources for fallback (expanded to ~100 entries, ids normalized to fallback-source-1..N). */
 export const FALLBACK_HEAT_SOURCES: HeatSource[] = Array.from(
   { length: 100 },
   (_v, i) => {
     const base = FALLBACK_HEAT_SOURCES_BASE[i % FALLBACK_HEAT_SOURCES_BASE.length];
-    const copyIndex = Math.floor(i / FALLBACK_HEAT_SOURCES_BASE.length);
     return {
       ...base,
-      id: copyIndex === 0 ? base.id : `${base.id}-copy-${copyIndex + 1}`,
-      name: copyIndex === 0 ? base.name : `${base.name} (${copyIndex + 1})`,
+      id: `fallback-source-${i + 1}`,
     };
   }
 );
@@ -1952,16 +1950,14 @@ const FALLBACK_HEAT_CONSUMERS_BASE: HeatConsumer[] = [
   
 ];
 
-/** Heat consumers for fallback (expanded to ~100 synthetic entries). */
+/** Heat consumers for fallback (expanded to ~100 entries, ids normalized to fallback-consumer-1..N). */
 export const FALLBACK_HEAT_CONSUMERS: HeatConsumer[] = Array.from(
   { length: 100 },
   (_v, i) => {
     const base = FALLBACK_HEAT_CONSUMERS_BASE[i % FALLBACK_HEAT_CONSUMERS_BASE.length];
-    const copyIndex = Math.floor(i / FALLBACK_HEAT_CONSUMERS_BASE.length);
     return {
       ...base,
-      id: copyIndex === 0 ? base.id : `${base.id}-copy-${copyIndex + 1}`,
-      name: copyIndex === 0 ? base.name : `${base.name} (${copyIndex + 1})`,
+      id: `fallback-consumer-${i + 1}`,
     };
   }
 );
