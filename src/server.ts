@@ -12,6 +12,7 @@ import {
   handleEvaluateOpportunity,
   handleGetRankedOpportunities,
 } from "./api";
+import { getDynamoStatus } from "./api/dynamo-status";
 
 const app = express();
 const PORT = process.env.PORT ?? 3000;
@@ -75,6 +76,17 @@ app.get("/api/ranked-opportunities", async (_req, res) => {
   } catch (err) {
     console.error("GET /api/ranked-opportunities", err);
     res.status(500).json({ error: "Failed to fetch ranked opportunities" });
+  }
+});
+
+// Health and DynamoDB status (for testing that data is in DynamoDB and reachable)
+app.get("/api/health", async (_req, res) => {
+  try {
+    const dynamo = await getDynamoStatus();
+    res.json({ ok: true, dynamo });
+  } catch (err) {
+    console.error("GET /api/health", err);
+    res.status(500).json({ ok: false, error: err instanceof Error ? err.message : "Internal server error" });
   }
 });
 
