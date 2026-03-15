@@ -3,7 +3,8 @@
  * Serves API routes and optionally static files (index.html, script.js, styles.css).
  * Run: npm run dev then open http://localhost:3000
  */
-
+/// <reference path="../shared/node-path.d.ts" />
+/// <reference path="../shared/express.d.ts" />
 import path from "path";
 import express from "express";
 import {
@@ -14,8 +15,11 @@ import {
 } from "./api";
 import { getDynamoStatus } from "./api/dynamo-status";
 
+declare const process: { env: Record<string, string | undefined> };
+declare const __dirname: string;
+
 const app = express();
-const PORT = process.env.PORT ?? 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
 // CORS: allow frontend from any origin (file://, localhost, etc.)
 app.use((_req, res, next) => {

@@ -29,14 +29,14 @@ export async function fetchHeatSourcesFromDynamo(
         ExpressionAttributeNames: { "#industry": "industry" },
         ExpressionAttributeValues: { ":industry": industry },
       })
-    );
+    ) as { Items?: unknown[] };
     items = (result.Items ?? []) as Record<string, unknown>[];
   } else {
     const scanResult = await docClient.send(
       new ScanCommand({
         TableName: HEAT_SOURCES_TABLE,
       })
-    );
+    ) as { Items?: unknown[] };
     items = (scanResult.Items ?? []) as Record<string, unknown>[];
   }
 
@@ -60,7 +60,7 @@ export async function fetchHeatSourceByIdFromDynamo(id: string): Promise<HeatSou
       TableName: HEAT_SOURCES_TABLE,
       Key: { id },
     })
-  );
+  ) as { Item?: Record<string, unknown> };
 
   if (!result.Item) return null;
   return itemToHeatSource(result.Item as Record<string, unknown>);

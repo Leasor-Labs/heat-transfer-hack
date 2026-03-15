@@ -32,8 +32,8 @@ export async function getDynamoStatus(): Promise<DynamoStatus> {
       docClient.send(new ScanCommand({ TableName: HEAT_SOURCES_TABLE, Select: "COUNT" })),
       docClient.send(new ScanCommand({ TableName: HEAT_CONSUMERS_TABLE, Select: "COUNT" })),
     ]);
-    out.heatSourcesCount = sourcesRes.Count ?? 0;
-    out.heatConsumersCount = consumersRes.Count ?? 0;
+    out.heatSourcesCount = (sourcesRes as { Count?: number }).Count ?? 0;
+    out.heatConsumersCount = (consumersRes as { Count?: number }).Count ?? 0;
   } catch (err) {
     out.error = err instanceof Error ? err.message : String(err);
   }

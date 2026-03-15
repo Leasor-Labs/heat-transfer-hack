@@ -26,14 +26,14 @@ export async function fetchHeatConsumersFromDynamo(
         ExpressionAttributeNames: { "#category": "category" },
         ExpressionAttributeValues: { ":category": category },
       })
-    );
+    ) as { Items?: unknown[] };
     items = (result.Items ?? []) as Record<string, unknown>[];
   } else {
     const scanResult = await docClient.send(
       new ScanCommand({
         TableName: HEAT_CONSUMERS_TABLE,
       })
-    );
+    ) as { Items?: unknown[] };
     items = (scanResult.Items ?? []) as Record<string, unknown>[];
   }
 
@@ -55,7 +55,7 @@ export async function fetchHeatConsumerByIdFromDynamo(id: string): Promise<HeatC
       TableName: HEAT_CONSUMERS_TABLE,
       Key: { id },
     })
-  );
+  ) as { Item?: Record<string, unknown> };
 
   if (!result.Item) return null;
   return itemToHeatConsumer(result.Item as Record<string, unknown>);
