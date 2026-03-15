@@ -5,6 +5,7 @@ frontend:
       commands:
         - nvm use 18 || true
         - npm ci
+        - npm run seed-dynamo
         - npm run build:lambda
     build:
       commands:
