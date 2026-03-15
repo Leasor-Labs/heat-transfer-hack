@@ -9,13 +9,13 @@ frontend:
         # Repo root (Amplify may run from parent of heat-transfer-hack)
         - |
           REPO_ROOT="${CODEBUILD_SRC_DIR:-.}"
-          [ -d "heat-transfer-hack" ] && REPO_ROOT="heat-transfer-hack"
+          [ -d "heat-transfer-hack" ] && REPO_ROOT=""
           cd "$REPO_ROOT"
           chmod +x node_modules/.bin/* 2>/dev/null || true
         # Seed DynamoDB with Toledo data (only if tables exist; set env in Amplify if you use SAM backend)
         - |
           REPO_ROOT="${CODEBUILD_SRC_DIR:-.}"
-          [ -d "heat-transfer-hack" ] && REPO_ROOT="heat-transfer-hack"
+          [ -d "build" ] && REPO_ROOT="build"
           cd "$REPO_ROOT"
           export HEAT_SOURCES_TABLE="${HEAT_SOURCES_TABLE:-HeatSources}"
           export HEAT_CONSUMERS_TABLE="${HEAT_CONSUMERS_TABLE:-HeatConsumers}"
@@ -26,7 +26,7 @@ frontend:
         # Inject API URL into frontend (set REACT_APP_API_URL in Amplify env to your API Gateway URL)
         - |
           REPO_ROOT="${CODEBUILD_SRC_DIR:-.}"
-          [ -d "heat-transfer-hack" ] && REPO_ROOT="heat-transfer-hack"
+          [ -d "build" ] && REPO_ROOT="build"
           cd "$REPO_ROOT"
           API_URL="${REACT_APP_API_URL:-}"
           API_URL="${API_URL%/}"
@@ -35,7 +35,7 @@ frontend:
             echo "Injected HEATGRID_API_BASE_URL=$API_URL"
           fi
   artifacts:
-    baseDirectory: heat-transfer-hack
+    baseDirectory: build
     files:
       - '**/*'
   cache:
