@@ -86,27 +86,7 @@
         </div>
         </div>
 
-        <!-- Selection & Calculation Section -->
-        <div class="card">
-            <h3><i class="fas fa-link"></i> Create Heat Connection</h3>
-            <div class="selection-panel">
-                <div class="select-group">
-                    <label><i class="fas fa-industry"></i> Heat Source:</label>
-                    <select id="sourceSelect">
-                        <option value="">Select a source...</option>
-                    </select>
-                </div>
-                <div class="select-group">
-                    <label><i class="fas fa-building"></i> Heat Consumer:</label>
-                    <select id="consumerSelect">
-                        <option value="">Select a consumer...</option>
-                    </select>
-                </div>
-                <button id="calculateBtn" class="btn-primary" disabled>
-                    <i class="fas fa-calculator"></i> Calculate Opportunity
-                </button>
-            </div>
-        </div>
+
 
         <!-- Results Section (Hidden by default) -->
         <div id="resultsSection" class="card" style="display: none;">
@@ -159,7 +139,7 @@
         <!-- Rankings Section -->
         <div class="card rankings-section" style="display: none;">
             <h3><i class="fas fa-list-ol"></i> Top Ranked Opportunities</h3>
-            <p class="hint" style="margin-bottom: 15px;">
+            <p class="hint" style="margin-bottom: 15px; color: white;">
                 <i class="fas fa-info-circle"></i> 
                 Top opportunities for the selected heat source, ranked by feasibility score (higher = better)
             </p>

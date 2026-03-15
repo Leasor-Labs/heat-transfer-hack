@@ -868,7 +868,7 @@ function createDemoOpportunity() {
                 consumer.annualHeatDemandMWh || 3000
             ) * 0.4
         },
-        feasibilityScore: Math.round(100 - (distance * 2))
+        feasibilityScore: Math.max(0, Math.min(100, Math.round(100 - (distance * 2))))
     };
     
     displayOpportunityResults(currentOpportunity);
@@ -1134,14 +1134,13 @@ function createDemoRankings(sourceId = null) {
         for (let j = 0; j < consumers.length; j++) {
             const source = sourcesToUse[i];
             const consumer = consumers[j];
-            
             if (!source || !consumer) continue;
-            
             const distance = calculateHaversineDistance(
                 source.latitude, source.longitude,
                 consumer.latitude, consumer.longitude
             );
-            
+            // Only include if distance is 50km or less
+            if (distance > 50) continue;
             demoRankings.push({
                 rank: demoRankings.length + 1,
                 opportunity: {
@@ -1170,8 +1169,9 @@ function displayRankings(rankings, sourceId = null) {
         return;
     }
     
-    // Filter rankings if sourceId is provided
-    const filteredRankings = sourceId ? rankings.filter(r => r.opportunity.sourceId === sourceId) : rankings;
+    // Filter rankings if sourceId is provided, and filter out those with distance > 50km
+    const filteredRankings = (sourceId ? rankings.filter(r => r.opportunity.sourceId === sourceId) : rankings)
+        .filter(r => (r.opportunity.distanceKm || 0) <= 50);
     
     // Sort by feasibility score (descending) then re-rank the filtered list
     filteredRankings.sort((a, b) => {
