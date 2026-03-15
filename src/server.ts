@@ -84,7 +84,6 @@ app.get("/api/ranked-opportunities", async (_req, res) => {
   }
 });
 
-<<<<<<< HEAD
 // Health and DynamoDB status (for testing that data is in DynamoDB and reachable)
 app.get("/api/health", async (_req, res) => {
   try {
@@ -93,7 +92,9 @@ app.get("/api/health", async (_req, res) => {
   } catch (err) {
     console.error("GET /api/health", err);
     res.status(500).json({ ok: false, error: err instanceof Error ? err.message : "Internal server error" });
-=======
+  }
+});
+
 app.get("/api/tags", (_req, res) => {
   try {
     const data = handleGetTags();
@@ -101,7 +102,6 @@ app.get("/api/tags", (_req, res) => {
   } catch (err) {
     console.error("GET /api/tags", err);
     res.status(500).json({ error: "Failed to fetch tags" });
->>>>>>> exp3
   }
 });
 

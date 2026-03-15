@@ -5,16 +5,13 @@ import {
   TOLEDO_OHIO_BBOX,
   geocodeAddress,
 } from "./location-service";
-<<<<<<< HEAD
 import { HEAT_CONSUMERS_TABLE } from "../api/dynamo";
 import {
   fetchHeatConsumersFromDynamo,
   fetchHeatConsumerByIdFromDynamo,
 } from "../api/dynamo-heat-consumers";
-=======
 import { searchTokens } from "./query-utils";
 import { haversineDistanceKm } from "../lib/calculations/distance";
->>>>>>> exp3
 
 const BASE_HEAT_DEMAND_MWH = 3000;
 
@@ -128,14 +125,8 @@ function filterConsumersByDistance(
 
 /**
  * Returns heat consumers for the backend API.
-<<<<<<< HEAD
  * When DynamoDB is configured (HEAT_CONSUMERS_TABLE), uses DynamoDB unless
  * Location search is requested and configured. Otherwise returns Ohio seed data.
-=======
- * - Exact address: geocode query, then return consumers whose lat/long is within ADDRESS_SEARCH_RADIUS_KM.
- * - City/region: similar-string match on name, category, location tokens.
- * Primary: AWS Location Search. Fallback: heat-consumers.ts seed data.
->>>>>>> exp3
  */
 export async function getHeatConsumers(options?: {
   locationSearchQuery?: string;
@@ -156,38 +147,10 @@ export async function getHeatConsumers(options?: {
       return filterConsumersByDistance(candidates, lat, lng, ADDRESS_SEARCH_RADIUS_KM);
     }
   }
-<<<<<<< HEAD
   if (HEAT_CONSUMERS_TABLE) {
     return fetchHeatConsumersFromDynamo();
   }
   return [...HEAT_CONSUMERS_OHIO];
-=======
-
-  if (isLocationServiceConfigured()) {
-    try {
-      const awsConsumers = await getToledoHeatConsumersFromAWS();
-      if (awsConsumers.length > 0) {
-        if (query) {
-          const tokens = searchTokens(query);
-          if (tokens.length > 0) {
-            const nameLower = (c: HeatConsumer) => c.name.toLowerCase();
-            const categoryLower = (c: HeatConsumer) => c.category.toLowerCase();
-            const filtered = awsConsumers.filter((c) =>
-              tokens.some(
-                (t) => nameLower(c).includes(t) || categoryLower(c).includes(t)
-              )
-            );
-            if (filtered.length > 0) return filtered;
-          }
-        }
-        return awsConsumers;
-      }
-    } catch {
-      // fall through to fallback
-    }
-  }
-  return filterOhioConsumersByQuery(query);
->>>>>>> exp3
 }
 
 /**
