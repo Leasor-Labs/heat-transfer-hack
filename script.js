@@ -128,23 +128,23 @@ async function fetchTags() {
 document.addEventListener('DOMContentLoaded', async () => {
     console.log('HeatGrid initializing...');
     
-    // Show loading states
-    showLoading('rankingsBody', 'Loading heat sources...');
-    document.getElementById('markerCounts').innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading...';
+    // Refresh DynamoDB from Location Service on page load (fire-and-forget)
+    if (API_BASE_URL) {
+        fetch(API_BASE_URL + '/api/refresh-seed-from-location').catch(() => {});
+    }
+    
+    // No initial data load — map loads with no markers until user searches
+    showLoading('rankingsBody', 'Enter a location and click Search to load data.');
+    document.getElementById('markerCounts').innerHTML = '<i class="fas fa-map-marker-alt"></i> 0 sources, 0 consumers';
     
     // Fetch tags so search has access to all database tags
     await fetchTags();
     
-    // Initialize map with fallback
+    // Initialize map with fallback (no markers on first load)
     await initMap();
-    
-    // Load initial data (Ohio seed data)
-    await loadData();
     
     // Setup event listeners
     setupEventListeners();
-    
-    // Load rankings - removed to load only after calculate
 });
 
 // Show loading state helper

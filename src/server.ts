@@ -15,6 +15,7 @@ import {
   handleGetTags,
 } from "./api";
 import { getDynamoStatus } from "./api/dynamo-status";
+import { refreshDynamoFromLocationService } from "./data/build-seed-from-location-service";
 
 declare const process: { env: Record<string, string | undefined> };
 declare const __dirname: string;
@@ -40,6 +41,11 @@ app.use(express.json());
 app.get("/api/heat-sources", async (req, res) => {
   try {
     const locationSearchQuery = req.query.locationSearchQuery as string | undefined;
+    if (locationSearchQuery?.trim()) {
+      refreshDynamoFromLocationService().catch((err) =>
+        console.error("Refresh seed from location failed", err)
+      );
+    }
     const data = await handleGetHeatSources({ locationSearchQuery });
     res.json(data);
   } catch (err) {
@@ -51,6 +57,11 @@ app.get("/api/heat-sources", async (req, res) => {
 app.get("/api/heat-consumers", async (req, res) => {
   try {
     const locationSearchQuery = req.query.locationSearchQuery as string | undefined;
+    if (locationSearchQuery?.trim()) {
+      refreshDynamoFromLocationService().catch((err) =>
+        console.error("Refresh seed from location failed", err)
+      );
+    }
     const data = await handleGetHeatConsumers({ locationSearchQuery });
     res.json(data);
   } catch (err) {
@@ -81,6 +92,17 @@ app.get("/api/ranked-opportunities", async (_req, res) => {
   } catch (err) {
     console.error("GET /api/ranked-opportunities", err);
     res.status(500).json({ error: "Failed to fetch ranked opportunities" });
+  }
+});
+
+// Refresh DynamoDB from AWS Location Service (keywords). Called on page load and when search is used.
+app.get("/api/refresh-seed-from-location", async (_req, res) => {
+  try {
+    const result = await refreshDynamoFromLocationService();
+    res.json({ ok: true, sourcesWritten: result.sourcesWritten, consumersWritten: result.consumersWritten });
+  } catch (err) {
+    console.error("GET /api/refresh-seed-from-location", err);
+    res.status(500).json({ ok: false, error: err instanceof Error ? err.message : "Internal server error" });
   }
 });
 
