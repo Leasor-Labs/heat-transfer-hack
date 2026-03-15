@@ -1,7 +1,7 @@
 import type { GetRankedOpportunitiesResponse } from "../../../shared/api-contract";
 import type { OpportunityRanking } from "../../../shared/types";
-import { HEAT_SOURCES_OHIO } from "../../data/heat-sources-ohio";
-import { HEAT_CONSUMERS_OHIO } from "../../data/heat-consumers-ohio";
+import { HEAT_SOURCES_OHIO } from "../../data/heat-sources";
+import { HEAT_CONSUMERS_OHIO } from "../../data/heat-consumers";
 import { evaluateOpportunity } from "../../lib/integration/evaluate-opportunity";
 
 /**
