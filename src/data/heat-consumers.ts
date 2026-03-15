@@ -8,16 +8,30 @@ import {
 const BASE_HEAT_DEMAND_MWH = 3000;
 
 /**
- * Filter Ohio seed consumers by search query (name/category contains query).
- * If query is "ohio" (or empty after trim), returns all; otherwise filters by substring match.
+ * Extract meaningful location tokens from a search query (e.g. "Toledo, Oh" -> ["toledo", "oh"]).
+ */
+function searchTokens(query: string): string[] {
+  return query
+    .trim()
+    .toLowerCase()
+    .split(/[\s,]+/)
+    .filter((t) => t.length > 0 && t !== "oh");
+}
+
+/**
+ * Filter Ohio seed consumers by search query.
+ * Matches if name or category contains any token (e.g. "Toledo, Oh" -> match "Toledo").
  */
 function filterOhioConsumersByQuery(query: string): HeatConsumer[] {
-  const q = query.trim().toLowerCase();
-  if (!q || q === "ohio") return [...HEAT_CONSUMERS_OHIO];
-  return HEAT_CONSUMERS_OHIO.filter(
-    (c) =>
-      c.name.toLowerCase().includes(q) ||
-      c.category.toLowerCase().includes(q)
+  const tokens = searchTokens(query);
+  if (tokens.length === 0 || (tokens.length === 1 && tokens[0] === "ohio"))
+    return [...HEAT_CONSUMERS_OHIO];
+  const nameLower = (c: HeatConsumer) => c.name.toLowerCase();
+  const categoryLower = (c: HeatConsumer) => c.category.toLowerCase();
+  return HEAT_CONSUMERS_OHIO.filter((c) =>
+    tokens.some(
+      (t) => nameLower(c).includes(t) || categoryLower(c).includes(t)
+    )
   );
 }
 

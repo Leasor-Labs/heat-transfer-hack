@@ -32,6 +32,19 @@ let currentOpportunity = null;
 let allRankings = [];
 let mapInitialized = false;
 
+function showSearchBanner(message) {
+    const el = document.getElementById('searchBanner');
+    if (el) {
+        el.innerHTML = '<i class="fas fa-exclamation-circle"></i> ' + message;
+        el.style.display = 'flex';
+    }
+}
+
+function hideSearchBanner() {
+    const el = document.getElementById('searchBanner');
+    if (el) el.style.display = 'none';
+}
+
 // Show empty state when no search has been run (map and rankings driven by search only)
 function showEmptyRankingsMessage() {
     const tbody = document.getElementById('rankingsBody');
@@ -201,18 +214,18 @@ async function loadData(searchQuery = '') {
         if (sourcesResponse.ok) {
             sourcesData = await sourcesResponse.json();
         } else {
-            console.warn('API not available for sources, using Ohio seed fallback');
+            console.warn('API not available for sources');
         }
         
         if (consumersResponse.ok) {
             consumersData = await consumersResponse.json();
         } else {
-            console.warn('API not available for consumers, using Ohio seed fallback');
+            console.warn('API not available for consumers');
         }
         
-        // Update global variables; use Ohio fallback when API returned no data
-        sources = (sourcesData.heatSources && sourcesData.heatSources.length) ? (sourcesData.heatSources || []) : OHIO_HEAT_SOURCES_FALLBACK;
-        consumers = (consumersData.heatConsumers && consumersData.heatConsumers.length) ? (consumersData.heatConsumers || []) : OHIO_HEAT_CONSUMERS_FALLBACK;
+        // Use API response only when request succeeded; if failed or empty, keep markers off
+        sources = sourcesResponse.ok ? (sourcesData.heatSources || []) : [];
+        consumers = consumersResponse.ok ? (consumersData.heatConsumers || []) : [];
         
         console.log(`Loaded ${sources.length} sources, ${consumers.length} consumers`);
         
@@ -223,19 +236,22 @@ async function loadData(searchQuery = '') {
         updateSelectors();
         updateMarkerCounts();
         
-        // Show message if no data
         if (sources.length === 0 && consumers.length === 0) {
+            showSearchBanner('No heat sources or consumers found. Try a different search.');
             showError('rankingsBody', 'No heat sources or consumers found. Try a different search.');
+        } else {
+            hideSearchBanner();
         }
         
     } catch (error) {
         console.error('Error loading data:', error);
-        sources = OHIO_HEAT_SOURCES_FALLBACK;
-        consumers = OHIO_HEAT_CONSUMERS_FALLBACK;
+        sources = [];
+        consumers = [];
         if (mapInitialized) updateMarkers();
         updateSelectors();
         updateMarkerCounts();
-        showError('rankingsBody', 'Using Ohio seed data (API unavailable).');
+        showSearchBanner('Search failed or returned no results. Try again or a different search.');
+        showError('rankingsBody', 'Search failed or returned no results. Try again or a different search.');
     }
 }
 
@@ -362,6 +378,7 @@ function setupEventListeners() {
             if (!query) {
                 sources = [];
                 consumers = [];
+                hideSearchBanner();
                 if (mapInitialized) updateMarkers();
                 updateSelectors();
                 updateMarkerCounts();
