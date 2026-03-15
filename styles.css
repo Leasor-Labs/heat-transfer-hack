@@ -1,4 +1,3 @@
-
 * {
     margin: 0;
     padding: 0;
@@ -534,4 +533,38 @@ tr:hover {
 
 .btn-primary:not(:disabled):active {
     animation: pulse 0.3s;
+}
+
+/* 1. Always white background and black text for heat source/consumer selects */
+#sourceSelect, #consumerSelect {
+    background: #fff !important;
+    color: #111 !important;
+    border: 1px solid #ccc;
+}
+#sourceSelect option, #consumerSelect option {
+    background: #fff !important;
+    color: #111 !important;
+}
+
+/* 2. Rankings Table: Make gray/grayish text dark black */
+.rankings-section table tbody td,
+.rankings-section table tbody td.loading,
+.rankings-section .hint {
+    color: #111 !important;
+}
+
+/* 3. Rankings Table: Orange header row with white text */
+.rankings-section table thead tr {
+    background: #ff8800 !important;
+}
+.rankings-section table thead th {
+    color: #fff !important;
+    background: transparent !important;
+}
+
+/* 4. Dropdowns in rankings section: dark black text */
+.rankings-section select,
+.rankings-section select option {
+    color: #111 !important;
+    background: #fff !important;
 }
