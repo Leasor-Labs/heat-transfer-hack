@@ -95,9 +95,9 @@ app.get("/api/health", async (_req, res) => {
   }
 });
 
-app.get("/api/tags", (_req, res) => {
+app.get("/api/tags", async (_req, res) => {
   try {
-    const data = handleGetTags();
+    const data = await handleGetTags();
     res.json(data);
   } catch (err) {
     console.error("GET /api/tags", err);
