@@ -49,8 +49,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Setup event listeners
     setupEventListeners();
     
-    // Load rankings
-    await loadRankings();
+    // Load rankings - removed to load only after calculate
 });
 
 // Show loading state helper
@@ -498,7 +497,17 @@ function fitMarkersToBounds() {
 
 // Calculate opportunity for selected source and consumer
 async function calculateOpportunity() {
-    if (!selectedSourceId || !selectedConsumerId) return;
+    // Ensure we have the latest selection values (defensive — read from DOM if needed)
+    const sourceSelectEl = document.getElementById('sourceSelect');
+    const consumerSelectEl = document.getElementById('consumerSelect');
+    if (!selectedSourceId && sourceSelectEl) selectedSourceId = sourceSelectEl.value;
+    if (!selectedConsumerId && consumerSelectEl) selectedConsumerId = consumerSelectEl.value;
+
+    // If still missing, notify user and stop
+    if (!selectedSourceId || !selectedConsumerId) {
+        alert('Please select both a heat source and a heat consumer before calculating.');
+        return;
+    }
     
     // Show loading state
     const calculateBtn = document.getElementById('calculateBtn');
@@ -540,6 +549,14 @@ async function calculateOpportunity() {
             resultsSection.scrollIntoView({ behavior: 'smooth' });
         }
         
+        // Load and show rankings for the selected source
+        await loadRankings(selectedSourceId);
+        const rankingsSection = document.querySelector('.rankings-section');
+        if (rankingsSection) {
+            rankingsSection.style.display = 'block';
+            rankingsSection.scrollIntoView({ behavior: 'smooth' });
+        }
+        
     } catch (error) {
         console.error('Error calculating opportunity:', error);
         alert('Failed to calculate opportunity. Using demo data instead.');
@@ -547,10 +564,37 @@ async function calculateOpportunity() {
         // Create demo opportunity for testing
         createDemoOpportunity();
         
+        // Show results section
+        const resultsSection = document.getElementById('resultsSection');
+        if (resultsSection) {
+            resultsSection.style.display = 'block';
+            resultsSection.scrollIntoView({ behavior: 'smooth' });
+        }
+        
+        // Load and show rankings for the selected source
+        await loadRankings(selectedSourceId);
+        const rankingsSection = document.querySelector('.rankings-section');
+        if (rankingsSection) {
+            rankingsSection.style.display = 'block';
+            rankingsSection.scrollIntoView({ behavior: 'smooth' });
+        }
+        
     } finally {
         // Restore button
         calculateBtn.innerHTML = originalText;
         calculateBtn.disabled = false;
+
+        // Always attempt to load and show rankings (defensive — show UI even if calculation failed)
+        try {
+            await loadRankings(selectedSourceId);
+        } catch (e) {
+            console.warn('Failed to load rankings in finally:', e);
+        }
+        const rankingsSection = document.querySelector('.rankings-section');
+        if (rankingsSection) {
+            rankingsSection.style.display = 'block';
+            rankingsSection.scrollIntoView({ behavior: 'smooth' });
+        }
     }
 }
 
@@ -833,7 +877,7 @@ function createFinancialChart(initialCost, annualSavings) {
 }
 
 // Load ranked opportunities
-async function loadRankings() {
+async function loadRankings(sourceId = null) {
     try {
         const response = await fetch(`${API_BASE_URL}/api/ranked-opportunities`);
         
@@ -843,26 +887,28 @@ async function loadRankings() {
         
         const data = await response.json();
         allRankings = data.rankings || [];
-        displayRankings(allRankings);
+        displayRankings(allRankings, sourceId);
         
     } catch (error) {
         console.error('Error loading rankings:', error);
         showError('rankingsBody', 'Failed to load rankings. Using demo data.');
         
         // Create demo rankings
-        createDemoRankings();
+        createDemoRankings(sourceId);
     }
 }
 
 // Create demo rankings for testing
-function createDemoRankings() {
+function createDemoRankings(sourceId = null) {
     if (sources.length === 0 || consumers.length === 0) return;
     
     const demoRankings = [];
     
-    for (let i = 0; i < Math.min(5, sources.length); i++) {
-        for (let j = 0; j < Math.min(2, consumers.length); j++) {
-            const source = sources[i];
+    const sourcesToUse = sourceId ? sources.filter(s => s.id === sourceId) : sources.slice(0, Math.min(5, sources.length));
+    
+    for (let i = 0; i < sourcesToUse.length; i++) {
+        for (let j = 0; j < consumers.length; j++) {
+            const source = sourcesToUse[i];
             const consumer = consumers[j];
             
             if (!source || !consumer) continue;
@@ -887,11 +933,11 @@ function createDemoRankings() {
         }
     }
     
-    displayRankings(demoRankings);
+    displayRankings(demoRankings, sourceId);
 }
 
 // Display rankings
-function displayRankings(rankings) {
+function displayRankings(rankings, sourceId = null) {
     const tbody = document.getElementById('rankingsBody');
     if (!tbody) return;
     
@@ -900,8 +946,21 @@ function displayRankings(rankings) {
         return;
     }
     
+    // Filter rankings if sourceId is provided
+    const filteredRankings = sourceId ? rankings.filter(r => r.opportunity.sourceId === sourceId) : rankings;
+    
+    // Sort by feasibility score (descending) then re-rank the filtered list
+    filteredRankings.sort((a, b) => {
+        const aScore = (a && a.opportunity && a.opportunity.feasibilityScore) || 0;
+        const bScore = (b && b.opportunity && b.opportunity.feasibilityScore) || 0;
+        return bScore - aScore;
+    });
+    filteredRankings.forEach((item, index) => {
+        item.rank = index + 1;
+    });
+    
     let html = '';
-    rankings.slice(0, 10).forEach((item, index) => {
+    filteredRankings.slice(0, 10).forEach((item, index) => {
         const opp = item.opportunity;
         const sourceName = getSourceName(opp.sourceId);
         const consumerName = getConsumerName(opp.consumerId);
