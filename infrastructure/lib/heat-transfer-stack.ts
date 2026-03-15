@@ -50,7 +50,7 @@ export class HeatTransferStack extends cdk.Stack {
         minify: true,
         sourceMap: true,
         target: "node20",
-        forceDocker: false,
+        forceDockerBundling: false,
       },
     };
 
