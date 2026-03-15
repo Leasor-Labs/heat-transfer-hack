@@ -270,11 +270,15 @@ async function initMap() {
             console.log('Using inline OSM fallback map');
         }
 
-        map = new maplibregl.Map({
+        const map = new maplibregl.Map({
             container: 'map',
             style: style,
-            center: [-82.5, 40.0],
-            zoom: 7
+            center: [-82.5, 40.0], // Center of Ohio
+            zoom: 7,
+           maxBounds: [
+            [-84.82, 40.52], // Southwest corner of northwest Ohio
+            [-83.00, 41.78]  // Northeast corner of northwest Ohio
+        ]
         });
 
         map.addControl(new maplibregl.NavigationControl(), 'top-left');
@@ -1135,7 +1139,7 @@ function createDemoOpportunity() {
                 consumer.annualHeatDemandMWh || 3000
             ) * 0.4
         },
-        feasibilityScore: Math.round(100 - (distance * 2))
+        feasibilityScore: Math.max(0, Math.min(100, Math.round(100 - (distance * 2))))
     };
     
     displayOpportunityResults(currentOpportunity);
@@ -1384,66 +1388,90 @@ function createFinancialChart(initialCost, annualSavings) {
 //     }
 // }
 
-// Future Feature: Create demo rankings for testing
-// function createDemoRankings(sourceId = null) {
-//     if (sources.length === 0 || consumers.length === 0) return;
-//     const demoRankings = [];
-//     const sourcesToUse = sourceId ? sources.filter(s => s.id === sourceId) : sources.slice(0, Math.min(5, sources.length));
-//     for (let i = 0; i < sourcesToUse.length; i++) {
-//         for (let j = 0; j < consumers.length; j++) {
-//             const source = sourcesToUse[i];
-//             const consumer = consumers[j];
-//             if (!source || !consumer) continue;
-//             const distance = calculateHaversineDistance(
-//                 source.latitude, source.longitude,
-//                 consumer.latitude, consumer.longitude
-//             );
-//             demoRankings.push({
-//                 rank: demoRankings.length + 1,
-//                 opportunity: {
-//                     sourceId: source.id,
-//                     consumerId: consumer.id,
-//                     distanceKm: distance,
-//                     financialModel: { paybackYears: distance * 0.5 + 2 },
-//                     feasibilityScore: Math.round(100 - distance)
-//                 }
-//             });
-//         }
-//     }
-//     displayRankings(demoRankings, sourceId);
-// }
+// Create demo rankings for testing
+function createDemoRankings(sourceId = null) {
+    if (sources.length === 0 || consumers.length === 0) return;
+    
+    const demoRankings = [];
+    
+    const sourcesToUse = sourceId ? sources.filter(s => s.id === sourceId) : sources.slice(0, Math.min(5, sources.length));
+    
+    for (let i = 0; i < sourcesToUse.length; i++) {
+        for (let j = 0; j < consumers.length; j++) {
+            const source = sourcesToUse[i];
+            const consumer = consumers[j];
+            if (!source || !consumer) continue;
+            const distance = calculateHaversineDistance(
+                source.latitude, source.longitude,
+                consumer.latitude, consumer.longitude
+            );
+            // Only include if distance is 50km or less
+            if (distance > 50) continue;
+            demoRankings.push({
+                rank: demoRankings.length + 1,
+                opportunity: {
+                    sourceId: source.id,
+                    consumerId: consumer.id,
+                    distanceKm: distance,
+                    financialModel: {
+                        paybackYears: distance * 0.5 + 2
+                    },
+                    feasibilityScore: Math.round(100 - distance)
+                }
+            });
+        }
+    }
+    
+    displayRankings(demoRankings, sourceId);
+}
 
-// Future Feature: Display rankings. Use rankedInRangeOpportunities (in-range opposing pairs, sorted by Best Score).
-// Each item: { rank, opportunity, bestScore }. Show bestScore in the Score column for "Best Score" ranking.
-// function displayInRangeRankings(rankings) {
-//     const tbody = document.getElementById('rankingsBody');
-//     if (!tbody) return;
-//     if (!rankings || rankings.length === 0) {
-//         tbody.innerHTML = '<tr><td colspan="7" class="loading">No in-range opportunities. Select a source or consumer to see Best Score rankings.</td></tr>';
-//         return;
-//     }
-//     let html = '';
-//     rankings.slice(0, 10).forEach((item, index) => {
-//         const opp = item.opportunity;
-//         const sourceName = getSourceName(opp.sourceId);
-//         const consumerName = getConsumerName(opp.consumerId);
-//         const score = item.bestScore != null ? item.bestScore : (opp.feasibilityScore || 0);
-//         html += `
-//             <tr onclick="selectOpportunity('${opp.sourceId}', '${opp.consumerId}')">
-//                 <td><strong>#${item.rank || index + 1}</strong></td>
-//                 <td>${sourceName}</td>
-//                 <td>${consumerName}</td>
-//                 <td>${(opp.distanceKm || 0).toFixed(1)} km</td>
-//                 <td>${(opp.financialModel?.paybackYears || 0).toFixed(1)} yrs</td>
-//                 <td><span class="score-badge">${score}</span></td>
-//                 <td><button class="btn-small" onclick="event.stopPropagation(); selectOpportunity('${opp.sourceId}', '${opp.consumerId}')">
-//                     <i class="fas fa-eye"></i> View
-//                 </button></td>
-//             </tr>
-//         `;
-//     });
-//     tbody.innerHTML = html;
-// }
+// Display rankings
+function displayRankings(rankings, sourceId = null) {
+    const tbody = document.getElementById('rankingsBody');
+    if (!tbody) return;
+    
+    if (!rankings || rankings.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="loading">No rankings available</td></tr>';
+        return;
+    }
+    
+    // Filter rankings if sourceId is provided, and filter out those with distance > 50km
+    const filteredRankings = (sourceId ? rankings.filter(r => r.opportunity.sourceId === sourceId) : rankings)
+        .filter(r => (r.opportunity.distanceKm || 0) <= 50);
+    
+    // Sort by feasibility score (descending) then re-rank the filtered list
+    filteredRankings.sort((a, b) => {
+        const aScore = (a && a.opportunity && a.opportunity.feasibilityScore) || 0;
+        const bScore = (b && b.opportunity && b.opportunity.feasibilityScore) || 0;
+        return bScore - aScore;
+    });
+    filteredRankings.forEach((item, index) => {
+        item.rank = index + 1;
+    });
+    
+    let html = '';
+    filteredRankings.slice(0, 10).forEach((item, index) => {
+        const opp = item.opportunity;
+        const sourceName = getSourceName(opp.sourceId);
+        const consumerName = getConsumerName(opp.consumerId);
+        
+        html += `
+            <tr onclick="selectOpportunity('${opp.sourceId}', '${opp.consumerId}')">
+                <td><strong>#${item.rank || index + 1}</strong></td>
+                <td>${sourceName}</td>
+                <td>${consumerName}</td>
+                <td>${(opp.distanceKm || 0).toFixed(1)} km</td>
+                <td>${(opp.financialModel?.paybackYears || 0).toFixed(1)} yrs</td>
+                <td><span class="score-badge">${opp.feasibilityScore || 0}</span></td>
+                <td><button class="btn-small" onclick="event.stopPropagation(); selectOpportunity('${opp.sourceId}', '${opp.consumerId}')">
+                    <i class="fas fa-eye"></i> View
+                </button></td>
+            </tr>
+        `;
+    });
+    
+    tbody.innerHTML = html;
+}
 
 // Helper to get source name by ID
 function getSourceName(id) {

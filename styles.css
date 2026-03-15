@@ -215,10 +215,14 @@ h1 {
 }
 
 .hint {
-    opacity: 0.9;
+    opacity: 0.95;
     font-size: 0.9em;
     margin-top: 10px;
     color: var(--muted);
+}
+
+.rankings-section .hint {
+    color: #fff !important;
 }
 
 /* Search + Map same width */
@@ -564,8 +568,9 @@ tr:hover {
 /* 2. Rankings Table: Make gray/grayish text dark black */
 .rankings-section table tbody td,
 .rankings-section table tbody td.loading,
+
 .rankings-section .hint {
-    color: #111 !important;
+    color: #fff !important;
 }
 
 /* 3. Rankings Table: Orange header row with white text */
