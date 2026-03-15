@@ -10,6 +10,10 @@ import { docClient, HEAT_SOURCES_TABLE, HEAT_CONSUMERS_TABLE } from "../api/dyna
 import { HEAT_SOURCES_OHIO } from "./heat-sources-ohio";
 import { HEAT_CONSUMERS_OHIO } from "./heat-consumers-ohio";
 
+declare const process: { exit(code: number): never };
+declare const require: { (id: string): unknown; main?: unknown };
+declare const module: unknown;
+
 async function seedHeatSources(): Promise<void> {
   if (!HEAT_SOURCES_TABLE) {
     console.error("HEAT_SOURCES_TABLE is not set. Set it and try again.");
