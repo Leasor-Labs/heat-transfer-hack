@@ -6,16 +6,29 @@
  */
 
 function getEnv(key: string): string | undefined {
+  // #region agent log
+  fetch('http://127.0.0.1:7528/ingest/59cacce0-7747-4658-a89b-976b0f7d76a2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d3ad2d'},body:JSON.stringify({sessionId:'d3ad2d',location:'location-service.ts:getEnv:entry',message:'getEnv called',data:{key},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
+  // #endregion
   try {
     const p = (globalThis as unknown as { process?: { env?: Record<string, string> } }).process;
-    return p?.env?.[key];
-  } catch {
+    const value = p?.env?.[key];
+    // #region agent log
+    fetch('http://127.0.0.1:7528/ingest/59cacce0-7747-4658-a89b-976b0f7d76a2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d3ad2d'},body:JSON.stringify({sessionId:'d3ad2d',location:'location-service.ts:getEnv:return',message:'getEnv result',data:{key,resultIsUndefined:value===undefined,valueLength:typeof value==='string'?value.length:undefined},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
+    // #endregion
+    return value;
+  } catch (e) {
+    // #region agent log
+    fetch('http://127.0.0.1:7528/ingest/59cacce0-7747-4658-a89b-976b0f7d76a2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d3ad2d'},body:JSON.stringify({sessionId:'d3ad2d',location:'location-service.ts:getEnv:catch',message:'getEnv threw',data:{key,error:String((e as Error)?.message||e)},timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
+    // #endregion
     return undefined;
   }
 }
 
-const PLACE_INDEX_NAME = getEnv("PLACE_INDEX_NAME") ?? "locationFinder";
+const PLACE_INDEX_NAME = getEnv("PLACE_INDEX_NAME") ?? "";
 const AWS_REGION = getEnv("AWS_REGION") ?? "us-east-1";
+// #region agent log
+fetch('http://127.0.0.1:7528/ingest/59cacce0-7747-4658-a89b-976b0f7d76a2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d3ad2d'},body:JSON.stringify({sessionId:'d3ad2d',location:'location-service.ts:moduleLoad',message:'env after load',data:{placeIndexNameEmpty:PLACE_INDEX_NAME.length===0,placeIndexNameLen:PLACE_INDEX_NAME.length,AWS_REGION},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
+// #endregion
 
 export type PlaceResult = {
   placeId: string;
