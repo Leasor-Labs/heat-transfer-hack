@@ -37,12 +37,25 @@ export function isLocationServiceConfigured(): boolean {
 }
 
 /**
+ * Bounding box for City of Toledo, Ohio.
+ * Format: [southwest_longitude, southwest_latitude, northeast_longitude, northeast_latitude].
+ */
+export const TOLEDO_OHIO_BBOX: [number, number, number, number] = [
+  -83.7, 41.55, -83.45, 41.75,
+];
+
+/**
  * Search for places by text (e.g. "industrial facility Ohio").
  * Returns array of place labels and coordinates.
+ * When filterBBox is provided, results are restricted to that area; do not pass biasPosition (AWS forbids both).
  */
 export async function searchPlacesByText(
   text: string,
-  options?: { maxResults?: number; biasPosition?: [number, number] }
+  options?: {
+    maxResults?: number;
+    biasPosition?: [number, number];
+    filterBBox?: [number, number, number, number];
+  }
 ): Promise<PlaceResult[]> {
   if (!isLocationServiceConfigured()) {
     return [];
@@ -56,7 +69,9 @@ export async function searchPlacesByText(
       IndexName: getPlaceIndexName(),
       Text: text,
       MaxResults: options?.maxResults ?? 10,
-      BiasPosition: options?.biasPosition,
+      ...(options?.filterBBox
+        ? { FilterBBox: options.filterBBox }
+        : { BiasPosition: options?.biasPosition }),
     });
     const response = (await client.send(command)) as {
       Results?: Array<{ Place?: { PlaceId?: string; Label?: string; Geometry?: { Point?: [number, number] } } }>;
