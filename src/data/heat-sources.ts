@@ -87,18 +87,22 @@ async function getToledoHeatSourcesFromAWS(): Promise<HeatSource[]> {
 
 /**
  * Returns heat sources for the backend API.
- * If Amazon Location Service is configured, returns real Toledo places from keyword searches;
- * otherwise returns Ohio seed data filtered by locationSearchQuery.
+ * Prefers Ohio seed data (curated Toledo/Ohio factories) when it matches the query,
+ * so the real factory list always shows. Falls back to AWS Location Service only when
+ * the seed data has no matches for the search.
  */
 export async function getHeatSources(options?: {
   locationSearchQuery?: string;
 }): Promise<HeatSource[]> {
   const query = options?.locationSearchQuery?.trim() ?? "";
+  const seedResults = filterOhioSourcesByQuery(query);
+  // Prefer curated seed data (real Toledo factories, etc.) when we have matches
+  if (seedResults.length > 0) return seedResults;
   if (isLocationServiceConfigured()) {
     const toledoSources = await getToledoHeatSourcesFromAWS();
     if (toledoSources.length > 0) return toledoSources;
   }
-  return filterOhioSourcesByQuery(query);
+  return seedResults;
 }
 
 /**
