@@ -5,6 +5,8 @@ import {
   TOLEDO_OHIO_BBOX,
   geocodeAddress,
 } from "./location-service";
+import { searchTokens } from "./query-utils";
+import { haversineDistanceKm } from "../lib/calculations/distance";
 import { DEFAULT_ASSUMPTIONS } from "../../shared/constants";
 import { HEAT_SOURCES_TABLE } from "../api/dynamo";
 import {
@@ -233,7 +235,7 @@ function filterOhioSourcesByQuery(query: string): HeatSource[] {
   const industryLower = (s: HeatSource) => s.industry.toLowerCase();
   return HEAT_SOURCES_OHIO.filter((s) =>
     tokens.some(
-      (t) => nameLower(s).includes(t) || industryLower(s).includes(t)
+      (t: string) => nameLower(s).includes(t) || industryLower(s).includes(t)
     )
   );
 }
