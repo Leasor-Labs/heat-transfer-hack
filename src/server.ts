@@ -2,7 +2,9 @@
  * HTTP server that exposes the backend API for the HeatGrid frontend.
  * Serves API routes and optionally static files (index.html, script.js, styles.css).
  * Run: npm run dev then open http://localhost:3000
+ * Load .env from project root so AWS and server env vars can be set there (see .env.example).
  */
+import "dotenv/config";
 /// <reference path="../shared/node-path.d.ts" />
 /// <reference path="../shared/express.d.ts" />
 import path from "path";
@@ -16,6 +18,7 @@ import {
 } from "./api";
 import { getDynamoStatus } from "./api/dynamo-status";
 import { refreshDynamoFromLocationService } from "./data/build-seed-from-location-service";
+import { geocodeAddress } from "./data/location-service";
 
 declare const process: { env: Record<string, string | undefined> };
 declare const __dirname: string;
@@ -94,6 +97,27 @@ app.post("/api/evaluate-opportunity", async (req, res) => {
   } catch (err) {
     console.error("POST /api/evaluate-opportunity", err);
     res.status(500).json({ error: "Failed to evaluate opportunity" });
+  }
+});
+
+// Geocode a location string via AWS Location Service; returns { longitude, latitude } for map zoom.
+app.get("/api/geocode", async (req, res) => {
+  try {
+    const q = (req.query.q ?? req.query.query ?? "").toString().trim();
+    if (!q) {
+      res.status(400).json({ error: "Missing query parameter q" });
+      return;
+    }
+    const position = await geocodeAddress(q);
+    if (!position) {
+      res.status(404).json({ error: "Location not found" });
+      return;
+    }
+    const [longitude, latitude] = position;
+    res.json({ longitude, latitude });
+  } catch (err) {
+    console.error("GET /api/geocode", err);
+    res.status(500).json({ error: "Failed to geocode" });
   }
 });
 

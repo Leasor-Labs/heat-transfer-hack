@@ -270,6 +270,9 @@ async function initMap() {
     }
 }
 
+// Zoom level when flying to a geocoded location (no markers or before fitting to markers).
+const GEOCODE_ZOOM = 12;
+
 // Load data from backend
 async function loadData(searchQuery = '') {
     try {
@@ -284,16 +287,40 @@ async function loadData(searchQuery = '') {
             console.log(`Searching for: ${searchQuery}`);
         }
         
-        // Fetch both in parallel with timeout
+        // Fetch geocode (for map zoom) and data in parallel with timeout
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
         
-        const [sourcesResponse, consumersResponse] = await Promise.all([
+        const geocodeUrl = searchQuery
+            ? `${API_BASE_URL}/api/geocode?q=${encodeURIComponent(searchQuery)}`
+            : null;
+        const geocodePromise = geocodeUrl
+            ? fetch(geocodeUrl, { signal: controller.signal }).catch(() => ({ ok: false }))
+            : Promise.resolve({ ok: false });
+        
+        const [sourcesResponse, consumersResponse, geocodeResponse] = await Promise.all([
             fetch(sourcesUrl, { signal: controller.signal }).catch(() => ({ ok: false, status: 404 })),
-            fetch(consumersUrl, { signal: controller.signal }).catch(() => ({ ok: false, status: 404 }))
+            fetch(consumersUrl, { signal: controller.signal }).catch(() => ({ ok: false, status: 404 })),
+            geocodePromise
         ]);
         
         clearTimeout(timeoutId);
+        
+        // Zoom map to geocoded position when a location was searched (AWS Location Services).
+        if (searchQuery && mapInitialized && map && geocodeResponse.ok && typeof geocodeResponse.json === 'function') {
+            try {
+                const geo = await geocodeResponse.json();
+                if (geo && typeof geo.longitude === 'number' && typeof geo.latitude === 'number') {
+                    map.flyTo({
+                        center: [geo.longitude, geo.latitude],
+                        zoom: GEOCODE_ZOOM,
+                        duration: 1200
+                    });
+                }
+            } catch (e) {
+                console.warn('Geocode response invalid, skipping zoom', e);
+            }
+        }
         
         // Handle responses with fallbacks
         let sourcesData = { heatSources: [] };
