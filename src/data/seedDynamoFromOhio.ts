@@ -2,7 +2,7 @@
  * Seeds DynamoDB HeatSources and HeatConsumers tables with the basic fallback dataset
  * (used when AWS Location Services are down). Run after tables exist.
  * Requires env: HEAT_SOURCES_TABLE, HEAT_CONSUMERS_TABLE, AWS_REGION (and AWS credentials).
- * .env is loaded via the npm script preload (scripts/dotenv-preload.cjs).
+ * npm run seed-dynamo loads .env from the project root (see scripts/dotenv-preload.cjs).
  *
  * Usage: npm run seed-dynamo
  * Or: HEAT_SOURCES_TABLE=HeatSources HEAT_CONSUMERS_TABLE=HeatConsumers npx ts-node src/data/seedDynamoFromOhio.ts

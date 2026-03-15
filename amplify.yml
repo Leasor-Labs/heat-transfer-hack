@@ -3,6 +3,7 @@ frontend:
   phases:
     preBuild:
       commands:
+        - nvm use 18 || true
         - npm ci
         - npm run build:lambda
     build:

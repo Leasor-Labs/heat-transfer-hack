@@ -4,10 +4,12 @@
 # Dependencies and build
 node_modules/
 build/
+dist/
 *.log
 npm-debug.log*
 
 # IDE / OS
+.cursor/
 .idea/
 .vscode/
 .DS_Store
