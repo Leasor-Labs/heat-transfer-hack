@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HeatGrid - Waste Heat Redistribution Platform</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
     
     <!-- MapLibre GL JS (used with AWS Location Service Maps) -->
     <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet">
@@ -46,12 +47,26 @@
         <div class="card search-section">
             <h3><i class="fas fa-search"></i> Find Heat Sources & Demands</h3>
             <div class="search-box">
+<<<<<<< HEAD
                 <input type="text" id="locationSearch" placeholder="Enter city or region (e.g., Cleveland, OH)">
                 <button id="searchBtn"><i class="fas fa-map-marker-alt"></i> Search</button>
             </div>
             <p class="hint">
                 <i class="fas fa-info-circle"></i> Enter a city or region to search (seed data available locally).
             </p>
+=======
+                <div class="autocomplete-wrap">
+                    <input type="text" id="locationSearch" placeholder="Enter city or region (e.g., Cleveland, OH)" value="" autocomplete="off">
+                    <ul id="autocompleteList" class="autocomplete-list" role="listbox" aria-expanded="false" aria-hidden="true"></ul>
+                </div>
+                <button id="searchBtn"><i class="fas fa-map-marker-alt"></i> Search</button>
+            </div>
+            <!-- <p class="hint">
+                <i class="fas fa-info-circle"></i> 
+                Add a hint here if needed.
+            </p> -->
+            <div id="searchBanner" class="search-banner" role="alert" style="display: none;"></div>
+>>>>>>> 4cbf27fde177060b4cfb840c9cc12449b9dbd3aa
         </div>
 
         <!-- Map Section -->
@@ -179,8 +194,8 @@
         </div>
     </div>
     
-    <!-- Set API base URL for Amplify: point to your API Gateway URL (e.g. Lambda backend). Leave empty to use Ohio seed fallback. -->
-    <script>window.HEATGRID_API_BASE_URL = "";</script>
+    <!-- API base URL: set to your backend (e.g. http://localhost:3000 for npm run dev, or API Gateway for production). Empty = same-origin only. -->
+    <script>window.HEATGRID_API_BASE_URL = "http://localhost:3000";</script>
     <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
     <script src="script.js"></script>
     <script>

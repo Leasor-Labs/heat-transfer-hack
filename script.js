@@ -151,12 +151,6 @@ async function initMap() {
                 .addTo(map);
         });
 
-        // add small class to header to trigger entrance animation after map load
-        try {
-            const headerEl = document.querySelector('header');
-            if (headerEl) setTimeout(() => headerEl.classList.add('enter'), 220);
-        } catch (e) {}
-
         map.on('error', (e) => {
             console.error('Map error:', e);
         });
@@ -281,20 +275,12 @@ function updateMarkers() {
         `;
         
         const popup = new maplibregl.Popup({ offset: 25 }).setHTML(popupContent);
-
-        // Create custom HTML marker with pulse
-        const el = document.createElement('div');
-        el.className = 'map-marker source-marker';
-        el.setAttribute('title', source.name || 'Source');
-        const core = document.createElement('div'); core.className = 'marker-core';
-        const pulse = document.createElement('span'); pulse.className = 'marker-pulse';
-        el.appendChild(core); el.appendChild(pulse);
-
-        const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
+        
+        const marker = new maplibregl.Marker({ color: '#ff4d4d' })
             .setLngLat([source.longitude, source.latitude])
             .setPopup(popup)
             .addTo(map);
-
+        
         sourceMarkers.push({ marker, id: source.id, data: source });
     });
     
@@ -319,19 +305,12 @@ function updateMarkers() {
         `;
         
         const popup = new maplibregl.Popup({ offset: 25 }).setHTML(popupContent);
-
-        const el = document.createElement('div');
-        el.className = 'map-marker consumer-marker';
-        el.setAttribute('title', consumer.name || 'Consumer');
-        const core = document.createElement('div'); core.className = 'marker-core';
-        const pulse = document.createElement('span'); pulse.className = 'marker-pulse';
-        el.appendChild(core); el.appendChild(pulse);
-
-        const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
+        
+        const marker = new maplibregl.Marker({ color: '#4d79ff' })
             .setLngLat([consumer.longitude, consumer.latitude])
             .setPopup(popup)
             .addTo(map);
-
+        
         consumerMarkers.push({ marker, id: consumer.id, data: consumer });
     });
     
@@ -994,9 +973,9 @@ function displayRankings(rankings, sourceId = null) {
                 <td>${(opp.distanceKm || 0).toFixed(1)} km</td>
                 <td>${(opp.financialModel?.paybackYears || 0).toFixed(1)} yrs</td>
                 <td><span class="score-badge">${opp.feasibilityScore || 0}</span></td>
-                <td><div class="row-actions"><button class="btn-small" onclick="event.stopPropagation(); selectOpportunity('${opp.sourceId}', '${opp.consumerId}')">
+                <td><button class="btn-small" onclick="event.stopPropagation(); selectOpportunity('${opp.sourceId}', '${opp.consumerId}')">
                     <i class="fas fa-eye"></i> View
-                </button></div></td>
+                </button></td>
             </tr>
         `;
     });

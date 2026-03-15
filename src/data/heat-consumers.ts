@@ -1,39 +1,139 @@
 import type { HeatConsumer } from "../../shared/types";
-import { HEAT_CONSUMERS_OHIO } from "./heat-consumers-ohio";
 import {
   searchPlacesByText,
   isLocationServiceConfigured,
+  TOLEDO_OHIO_BBOX,
 } from "./location-service";
+import type { PlaceResult } from "./location-service";
 
 const BASE_HEAT_DEMAND_MWH = 3000;
 
+/** Search phrases for heat consumers in Toledo, OH (AWS Location Service). */
+const HEAT_CONSUMER_KEYWORDS = [
+  "Greenhouses",
+  "Warehouses",
+  "Food Processing",
+  "Laundry",
+] as const;
+
+/**
+ * Ohio heat consumers seed data. Coordinates can be populated or refreshed
+ * using Amazon Location Service (searchPlacesByText / geocodeAddress).
+ */
+export const HEAT_CONSUMERS_OHIO: HeatConsumer[] = [
+  {
+    id: "ohio-consumer-1",
+    name: "Cleveland District Heating Network",
+    category: "District Heating",
+    latitude: 41.5052,
+    longitude: -81.6934,
+    annualHeatDemandMWh: 15000,
+  },
+  {
+    id: "ohio-consumer-2",
+    name: "Columbus Hospital Complex",
+    category: "Healthcare",
+    latitude: 39.9652,
+    longitude: -83.0008,
+    annualHeatDemandMWh: 8000,
+  },
+  {
+    id: "ohio-consumer-3",
+    name: "Cincinnati Apartment Complex",
+    category: "Residential",
+    latitude: 39.1105,
+    longitude: -84.505,
+    annualHeatDemandMWh: 3000,
+  },
+  {
+    id: "ohio-consumer-4",
+    name: "Toledo Greenhouse Facility",
+    category: "Agriculture",
+    latitude: 41.6588,
+    longitude: -83.5418,
+    annualHeatDemandMWh: 5000,
+  },
+  {
+    id: "ohio-consumer-5",
+    name: "Akron Food Processing Plant",
+    category: "Food Processing",
+    latitude: 41.0865,
+    longitude: -81.523,
+    annualHeatDemandMWh: 4000,
+  },
+];
+
+/**
+ * Extract meaningful location tokens from a search query (e.g. "Toledo, Oh" -> ["toledo", "oh"]).
+ */
+function searchTokens(query: string): string[] {
+  return query
+    .trim()
+    .toLowerCase()
+    .split(/[\s,]+/)
+    .filter((t) => t.length > 0 && t !== "oh");
+}
+
+/**
+ * Filter Ohio seed consumers by search query.
+ * Matches if name or category contains any token (e.g. "Toledo, Oh" -> match "Toledo").
+ */
+function filterOhioConsumersByQuery(query: string): HeatConsumer[] {
+  const tokens = searchTokens(query);
+  if (tokens.length === 0 || (tokens.length === 1 && tokens[0] === "ohio"))
+    return [...HEAT_CONSUMERS_OHIO];
+  const nameLower = (c: HeatConsumer) => c.name.toLowerCase();
+  const categoryLower = (c: HeatConsumer) => c.category.toLowerCase();
+  return HEAT_CONSUMERS_OHIO.filter((c) =>
+    tokens.some(
+      (t) => nameLower(c).includes(t) || categoryLower(c).includes(t)
+    )
+  );
+}
+
+/**
+ * Fetch real Toledo heat consumers from AWS: one search per keyword, aggregate and dedupe by placeId.
+ */
+async function getToledoHeatConsumersFromAWS(): Promise<HeatConsumer[]> {
+  const seen = new Set<string>();
+  const withKeyword: Array<{ place: PlaceResult; category: string }> = [];
+  for (const keyword of HEAT_CONSUMER_KEYWORDS) {
+    const places = await searchPlacesByText(keyword, {
+      maxResults: 5,
+      filterBBox: TOLEDO_OHIO_BBOX,
+    });
+    for (const p of places) {
+      if (seen.has(p.placeId)) continue;
+      seen.add(p.placeId);
+      withKeyword.push({ place: p, category: keyword });
+    }
+  }
+  return withKeyword.map(({ place: p, category }, i) => ({
+    id: `location-consumer-${i}-${p.placeId}`,
+    name: p.label || `Consumer site ${i + 1}`,
+    category,
+    latitude: p.position[1],
+    longitude: p.position[0],
+    annualHeatDemandMWh: BASE_HEAT_DEMAND_MWH,
+  }));
+}
+
 /**
  * Returns heat consumers for the backend API.
- * If Amazon Location Service is configured and a search query is provided,
- * augments with places from search; otherwise returns Ohio seed data.
+ * Prefers Ohio seed data when it matches the query; falls back to AWS Location Service only when
+ * the seed data has no matches for the search.
  */
 export async function getHeatConsumers(options?: {
   locationSearchQuery?: string;
 }): Promise<HeatConsumer[]> {
-  if (
-    isLocationServiceConfigured() &&
-    options?.locationSearchQuery?.trim()
-  ) {
-    const places = await searchPlacesByText(options.locationSearchQuery, {
-      maxResults: 10,
-    });
-    if (places.length > 0) {
-      return places.map((p, i) => ({
-        id: `location-consumer-${i}-${p.placeId}`,
-        name: p.label || `Consumer site ${i + 1}`,
-        category: "Commercial",
-        latitude: p.position[1],
-        longitude: p.position[0],
-        annualHeatDemandMWh: BASE_HEAT_DEMAND_MWH,
-      }));
-    }
+  const query = options?.locationSearchQuery?.trim() ?? "";
+  const seedResults = filterOhioConsumersByQuery(query);
+  if (seedResults.length > 0) return seedResults;
+  if (isLocationServiceConfigured()) {
+    const toledoConsumers = await getToledoHeatConsumersFromAWS();
+    if (toledoConsumers.length > 0) return toledoConsumers;
   }
-  return [...HEAT_CONSUMERS_OHIO];
+  return seedResults;
 }
 
 /**
