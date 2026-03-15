@@ -27,6 +27,8 @@ let sourceMarkers = [];
 let consumerMarkers = [];
 let selectedSourceId = null;
 let selectedConsumerId = null;
+let lastOpenSourcePopup = null;
+let lastOpenConsumerPopup = null;
 let currentRouteLayer = null;
 let currentOpportunity = null;
 let allRankings = [];
@@ -368,63 +370,65 @@ function updateMarkers() {
     
     // Add source markers (red)
     sources.forEach(source => {
-        // Validate coordinates
         if (!source.longitude || !source.latitude) {
             console.warn('Source missing coordinates:', source);
             return;
         }
-        
         const popupContent = `
                 <div style="padding: 10px; min-width: 200px;">
                 <h3 style="margin: 0 0 10px 0; color: #ff0000;">🏭 ${source.name || 'Unnamed Source'}</h3>
-                <p><strong>Industry:</strong> ${source.industry || 'Industrial'}</p>
-                <p><strong>Waste Heat:</strong> ${(source.estimatedWasteHeatMWhPerYear / 1000).toFixed(1)} GWh/year</p>
-                <p><strong>Recoverable:</strong> ${(source.recoverableHeatMWhPerYear / 1000).toFixed(1)} GWh/year</p>
-                <p><strong>Temperature:</strong> ${source.temperatureClass || 'medium'}</p>
+                <p style='color:#000;'><strong>Industry:</strong> ${source.industry || 'Industrial'}</p>
+                <p style='color:#000;'><strong>Waste Heat:</strong> ${(source.estimatedWasteHeatMWhPerYear / 1000).toFixed(1)} GWh/year</p>
+                <p style='color:#000;'><strong>Recoverable:</strong> ${(source.recoverableHeatMWhPerYear / 1000).toFixed(1)} GWh/year</p>
+                <p style='color:#000;'><strong>Temperature:</strong> ${source.temperatureClass || 'medium'}</p>
                 <button onclick="window.selectSource('${source.id}')" 
                     style="width:100%; padding:8px; background:#ff0000; color:white; border:none; border-radius:5px; cursor:pointer; margin-top:10px;">
                     <i class="fas fa-check"></i> Select This Source
                 </button>
             </div>
         `;
-        
         const popup = new maplibregl.Popup({ offset: 25 }).setHTML(popupContent);
-        
+        popup.on('open', () => {
+            if (lastOpenSourcePopup && lastOpenSourcePopup !== popup) {
+                lastOpenSourcePopup.remove();
+            }
+            lastOpenSourcePopup = popup;
+        });
         const marker = new maplibregl.Marker({ color: '#ff0000' })
             .setLngLat([source.longitude, source.latitude])
             .setPopup(popup)
             .addTo(map);
-        
         sourceMarkers.push({ marker, id: source.id, data: source });
     });
     
     // Add consumer markers (blue)
     consumers.forEach(consumer => {
-        // Validate coordinates
         if (!consumer.longitude || !consumer.latitude) {
             console.warn('Consumer missing coordinates:', consumer);
             return;
         }
-        
         const popupContent = `
                 <div style="padding: 10px; min-width: 200px;">
                 <h3 style="margin: 0 0 10px 0; color: #007bff;">🏢 ${consumer.name || 'Unnamed Consumer'}</h3>
-                <p><strong>Category:</strong> ${consumer.category || 'Building'}</p>
-                <p><strong>Heat Demand:</strong> ${(consumer.annualHeatDemandMWh / 1000).toFixed(1)} GWh/year</p>
+                <p style='color:#000;'><strong>Category:</strong> ${consumer.category || 'Building'}</p>
+                <p style='color:#000;'><strong>Heat Demand:</strong> ${(consumer.annualHeatDemandMWh / 1000).toFixed(1)} GWh/year</p>
                 <button onclick="window.selectConsumer('${consumer.id}')" 
                     style="width:100%; padding:8px; background:#007bff; color:white; border:none; border-radius:5px; cursor:pointer; margin-top:10px;">
                     <i class="fas fa-check"></i> Select This Consumer
                 </button>
             </div>
         `;
-        
         const popup = new maplibregl.Popup({ offset: 25 }).setHTML(popupContent);
-        
+        popup.on('open', () => {
+            if (lastOpenConsumerPopup && lastOpenConsumerPopup !== popup) {
+                lastOpenConsumerPopup.remove();
+            }
+            lastOpenConsumerPopup = popup;
+        });
         const marker = new maplibregl.Marker({ color: '#007bff' })
             .setLngLat([consumer.longitude, consumer.latitude])
             .setPopup(popup)
             .addTo(map);
-        
         consumerMarkers.push({ marker, id: consumer.id, data: consumer });
     });
     
@@ -510,8 +514,21 @@ function setupEventListeners() {
             
             // Auto-open popup for selected source
             if (selectedSourceId) {
-                const marker = sourceMarkers.find(m => m.id === selectedSourceId);
-                if (marker) marker.marker.togglePopup();
+                const markerObj = sourceMarkers.find(m => m.id === selectedSourceId);
+                if (markerObj) {
+                    // Remove select button for dropdown-triggered popup
+                    const popupContent = `
+                        <div style="padding: 10px; min-width: 200px;">
+                        <h3 style="margin: 0 0 10px 0; color: #ff0000;">🏭 ${markerObj.data.name || 'Unnamed Source'}</h3>
+                        <p style='color:#000;'><strong>Industry:</strong> ${markerObj.data.industry || 'Industrial'}</p>
+                        <p style='color:#000;'><strong>Waste Heat:</strong> ${(markerObj.data.estimatedWasteHeatMWhPerYear / 1000).toFixed(1)} GWh/year</p>
+                        <p style='color:#000;'><strong>Recoverable:</strong> ${(markerObj.data.recoverableHeatMWhPerYear / 1000).toFixed(1)} GWh/year</p>
+                        <p style='color:#000;'><strong>Temperature:</strong> ${markerObj.data.temperatureClass || 'medium'}</p>
+                        </div>
+                    `;
+                    markerObj.marker.getPopup().setHTML(popupContent);
+                    markerObj.marker.togglePopup();
+                }
             }
         });
     }
@@ -526,8 +543,19 @@ function setupEventListeners() {
             
             // Auto-open popup for selected consumer
             if (selectedConsumerId) {
-                const marker = consumerMarkers.find(m => m.id === selectedConsumerId);
-                if (marker) marker.marker.togglePopup();
+                const markerObj = consumerMarkers.find(m => m.id === selectedConsumerId);
+                if (markerObj) {
+                    // Remove select button for dropdown-triggered popup
+                    const popupContent = `
+                        <div style="padding: 10px; min-width: 200px;">
+                        <h3 style="margin: 0 0 10px 0; color: #007bff;">🏢 ${markerObj.data.name || 'Unnamed Consumer'}</h3>
+                        <p style='color:#000;'><strong>Category:</strong> ${markerObj.data.category || 'Building'}</p>
+                        <p style='color:#000;'><strong>Heat Demand:</strong> ${(markerObj.data.annualHeatDemandMWh / 1000).toFixed(1)} GWh/year</p>
+                        </div>
+                    `;
+                    markerObj.marker.getPopup().setHTML(popupContent);
+                    markerObj.marker.togglePopup();
+                }
             }
             // toggle empty class so placeholder shows as white background when no selection
             if (e.target.value === '') e.target.classList.add('empty'); else e.target.classList.remove('empty');
