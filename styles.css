@@ -266,6 +266,7 @@ h1 {
 
 .dot.red { background: #ff0000; box-shadow: 0 0 10px rgba(255,77,77,0.18); }
 .dot.blue { background: #007bff; box-shadow: 0 0 10px rgba(77,121,255,0.12); }
+.dot.green { background: #22c55e; box-shadow: 0 0 10px rgba(34,197,94,0.25); }
 
 #map {
     height: 520px;

@@ -12,9 +12,11 @@ import {
   handleGetHeatSources,
   handleGetHeatConsumers,
   handleEvaluateOpportunity,
+  handleRankedOpportunitiesInRange,
   // Future Feature: handleGetRankedOpportunities,
   handleGetTags,
 } from "./api";
+import type { RankedOpportunitiesInRangeRequest } from "../shared/api-contract";
 import { getDynamoStatus } from "./api/dynamo-status";
 import { refreshDynamoFromLocationService } from "./data/build-seed-from-location-service";
 import { geocodeAddress } from "./data/location-service";
@@ -96,6 +98,17 @@ app.post("/api/evaluate-opportunity", async (req, res) => {
   } catch (err) {
     console.error("POST /api/evaluate-opportunity", err);
     res.status(500).json({ error: "Failed to evaluate opportunity" });
+  }
+});
+
+app.post("/api/ranked-opportunities-in-range", async (req, res) => {
+  try {
+    const body = req.body as RankedOpportunitiesInRangeRequest;
+    const data = await handleRankedOpportunitiesInRange(body);
+    res.json(data);
+  } catch (err) {
+    console.error("POST /api/ranked-opportunities-in-range", err);
+    res.status(500).json({ error: "Failed to fetch ranked opportunities in range" });
   }
 });
 

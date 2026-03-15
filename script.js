@@ -34,6 +34,16 @@ let currentOpportunity = null;
 // Future Feature: let allRankings = [];
 let mapInitialized = false;
 
+// 2 km range circle: opposing heat types within this radius are highlighted
+const RANGE_RADIUS_KM = 2;
+const RANGE_CIRCLE_SOURCE_ID = 'range-circle-source';
+const RANGE_CIRCLE_LAYER_ID = 'range-circle-layer';
+let inRangeOpposingSourceIds = [];
+let inRangeOpposingConsumerIds = [];
+
+// Ranked list of in-range opposing pairs by Best Score (from API formula). Future Feature: display in rankings section.
+let rankedInRangeOpportunities = [];
+
 // All tags from database (industries + categories) for search autocomplete
 let allTags = { industries: [], categories: [] };
 
@@ -46,6 +56,32 @@ const LOCATION_SUGGESTIONS_STATIC = [
 
 // Autocomplete: city, region, or address only (no industry/category/site)
 const SUGGESTION_TYPE = { location: 'location' };
+
+// Haversine distance in km (for range circle and opposing-type filter)
+function haversineKm(lat1, lon1, lat2, lon2) {
+    const R = 6371;
+    const toRad = (d) => d * Math.PI / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2)**2;
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+}
+
+// GeoJSON Polygon coordinates for a circle (closed ring: first point = last point)
+function getCirclePolygon(centerLat, centerLng, radiusKm) {
+    const points = 64;
+    const coords = [];
+    const latDegPerKm = 1 / 111;
+    const lngDegPerKm = 1 / (111 * Math.cos(centerLat * Math.PI / 180));
+    for (let i = 0; i <= points; i++) {
+        const angle = (2 * Math.PI * i) / points;
+        const lat = centerLat + radiusKm * latDegPerKm * Math.cos(angle);
+        const lng = centerLng + radiusKm * lngDegPerKm * Math.sin(angle);
+        coords.push([lng, lat]);
+    }
+    return coords;
+}
 
 function getLocationSuggestions(query) {
     const q = (query || '').trim().toLowerCase();
@@ -461,7 +497,8 @@ function updateMarkers() {
             .addTo(map);
         consumerMarkers.push({ marker, id: consumer.id, data: consumer });
     });
-    
+
+    updateRangeCircleAndHighlights();
     console.log(`Added ${sourceMarkers.length} source markers, ${consumerMarkers.length} consumer markers`);
 }
 
@@ -540,7 +577,7 @@ function setupEventListeners() {
     if (sourceSelect) {
         sourceSelect.addEventListener('change', (e) => {
             selectedSourceId = e.target.value;
-            highlightSelected();
+            updateRangeCircleAndHighlights();
             updateCalculateButton();
             // toggle empty class so placeholder shows as white background when no selection
             if (e.target.value === '') e.target.classList.add('empty'); else e.target.classList.remove('empty');
@@ -571,7 +608,7 @@ function setupEventListeners() {
     if (consumerSelect) {
         consumerSelect.addEventListener('change', (e) => {
             selectedConsumerId = e.target.value;
-            highlightSelected();
+            updateRangeCircleAndHighlights();
             updateCalculateButton();
             
             // Auto-open popup for selected consumer
@@ -682,7 +719,110 @@ function updateCalculateButton() {
     }
 }
 
-// Highlight selected markers
+// Update 2 km range circle and which opposing markers are in range; then refresh highlights
+function updateRangeCircleAndHighlights() {
+    inRangeOpposingSourceIds = [];
+    inRangeOpposingConsumerIds = [];
+
+    let centerLat = null;
+    let centerLng = null;
+    let targetIsSource = false;
+
+    if (selectedSourceId) {
+        const src = sources.find(s => s.id === selectedSourceId);
+        if (src && typeof src.latitude === 'number' && typeof src.longitude === 'number') {
+            centerLat = src.latitude;
+            centerLng = src.longitude;
+            targetIsSource = true;
+        }
+    }
+    if (centerLat == null && selectedConsumerId) {
+        const con = consumers.find(c => c.id === selectedConsumerId);
+        if (con && typeof con.latitude === 'number' && typeof con.longitude === 'number') {
+            centerLat = con.latitude;
+            centerLng = con.longitude;
+            targetIsSource = false;
+        }
+    }
+
+    if (map && mapInitialized) {
+        if (map.getLayer(RANGE_CIRCLE_LAYER_ID)) map.removeLayer(RANGE_CIRCLE_LAYER_ID);
+        if (map.getSource(RANGE_CIRCLE_SOURCE_ID)) map.removeSource(RANGE_CIRCLE_SOURCE_ID);
+
+        if (centerLat != null && centerLng != null) {
+            const ring = getCirclePolygon(centerLat, centerLng, RANGE_RADIUS_KM);
+            map.addSource(RANGE_CIRCLE_SOURCE_ID, {
+                type: 'geojson',
+                data: {
+                    type: 'Feature',
+                    geometry: { type: 'Polygon', coordinates: [ring] }
+                }
+            });
+            map.addLayer({
+                id: RANGE_CIRCLE_LAYER_ID,
+                type: 'fill',
+                source: RANGE_CIRCLE_SOURCE_ID,
+                paint: {
+                    'fill-color': '#22c55e',
+                    'fill-opacity': 0.15
+                }
+            });
+
+            if (targetIsSource) {
+                consumers.forEach(c => {
+                    if (c.latitude != null && c.longitude != null && haversineKm(centerLat, centerLng, c.latitude, c.longitude) <= RANGE_RADIUS_KM) {
+                        inRangeOpposingConsumerIds.push(c.id);
+                    }
+                });
+            } else {
+                sources.forEach(s => {
+                    if (s.latitude != null && s.longitude != null && haversineKm(centerLat, centerLng, s.latitude, s.longitude) <= RANGE_RADIUS_KM) {
+                        inRangeOpposingSourceIds.push(s.id);
+                    }
+                });
+            }
+        }
+    }
+
+    highlightSelected();
+
+    // Compile opposing heat types into a list and fetch Best Score rankings (Future Feature: display in rankings section)
+    if (inRangeOpposingConsumerIds.length > 0 && selectedSourceId) {
+        loadRankedInRangeOpportunities({ sourceId: selectedSourceId, consumerIds: inRangeOpposingConsumerIds });
+    } else if (inRangeOpposingSourceIds.length > 0 && selectedConsumerId) {
+        loadRankedInRangeOpportunities({ consumerId: selectedConsumerId, sourceIds: inRangeOpposingSourceIds });
+    } else {
+        rankedInRangeOpportunities = [];
+        // Future Feature: displayInRangeRankings(rankedInRangeOpportunities);
+    }
+}
+
+// Load ranked opportunities for in-range opposing pairs (Best Score formula). Populates rankedInRangeOpportunities.
+async function loadRankedInRangeOpportunities(payload) {
+    if (!API_BASE_URL || !payload) {
+        rankedInRangeOpportunities = [];
+        return;
+    }
+    try {
+        const res = await fetch(`${API_BASE_URL}/api/ranked-opportunities-in-range`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (!res.ok) {
+            rankedInRangeOpportunities = [];
+            return;
+        }
+        const data = await res.json();
+        rankedInRangeOpportunities = data.rankings || [];
+        // Future Feature: displayInRangeRankings(rankedInRangeOpportunities);
+    } catch (e) {
+        console.warn('Failed to load ranked opportunities in range', e);
+        rankedInRangeOpportunities = [];
+    }
+}
+
+// Highlight selected markers and opposing heat types within 2 km range
 function highlightSelected() {
     // Reset all marker colors
     sourceMarkers.forEach(({ marker }) => {
@@ -693,8 +833,8 @@ function highlightSelected() {
         marker.getElement().style.filter = 'none';
         marker.getElement().style.opacity = '0.7';
     });
-    
-    // Highlight selected source
+
+    // Highlight selected source (gold)
     if (selectedSourceId) {
         const selected = sourceMarkers.find(m => m.id === selectedSourceId);
         if (selected) {
@@ -702,8 +842,8 @@ function highlightSelected() {
             selected.marker.getElement().style.opacity = '1';
         }
     }
-    
-    // Highlight selected consumer
+
+    // Highlight selected consumer (gold)
     if (selectedConsumerId) {
         const selected = consumerMarkers.find(m => m.id === selectedConsumerId);
         if (selected) {
@@ -711,6 +851,20 @@ function highlightSelected() {
             selected.marker.getElement().style.opacity = '1';
         }
     }
+
+    // Highlight opposing heat types within 2 km (green glow)
+    sourceMarkers.forEach(({ marker, id }) => {
+        if (inRangeOpposingSourceIds.indexOf(id) !== -1) {
+            marker.getElement().style.filter = 'drop-shadow(0 0 8px #22c55e)';
+            marker.getElement().style.opacity = '1';
+        }
+    });
+    consumerMarkers.forEach(({ marker, id }) => {
+        if (inRangeOpposingConsumerIds.indexOf(id) !== -1) {
+            marker.getElement().style.filter = 'drop-shadow(0 0 8px #22c55e)';
+            marker.getElement().style.opacity = '1';
+        }
+    });
 }
 
 // Fit map to show all active markers (zoom and pan with 2s animation)
@@ -1175,26 +1329,21 @@ function createFinancialChart(initialCost, annualSavings) {
 //     displayRankings(demoRankings, sourceId);
 // }
 
-// Future Feature: Display rankings
-// function displayRankings(rankings, sourceId = null) {
+// Future Feature: Display rankings. Use rankedInRangeOpportunities (in-range opposing pairs, sorted by Best Score).
+// Each item: { rank, opportunity, bestScore }. Show bestScore in the Score column for "Best Score" ranking.
+// function displayInRangeRankings(rankings) {
 //     const tbody = document.getElementById('rankingsBody');
 //     if (!tbody) return;
 //     if (!rankings || rankings.length === 0) {
-//         tbody.innerHTML = '<tr><td colspan="7" class="loading">No rankings available</td></tr>';
+//         tbody.innerHTML = '<tr><td colspan="7" class="loading">No in-range opportunities. Select a source or consumer to see Best Score rankings.</td></tr>';
 //         return;
 //     }
-//     const filteredRankings = sourceId ? rankings.filter(r => r.opportunity.sourceId === sourceId) : rankings;
-//     filteredRankings.sort((a, b) => {
-//         const aScore = (a && a.opportunity && a.opportunity.feasibilityScore) || 0;
-//         const bScore = (b && b.opportunity && b.opportunity.feasibilityScore) || 0;
-//         return bScore - aScore;
-//     });
-//     filteredRankings.forEach((item, index) => { item.rank = index + 1; });
 //     let html = '';
-//     filteredRankings.slice(0, 10).forEach((item, index) => {
+//     rankings.slice(0, 10).forEach((item, index) => {
 //         const opp = item.opportunity;
 //         const sourceName = getSourceName(opp.sourceId);
 //         const consumerName = getConsumerName(opp.consumerId);
+//         const score = item.bestScore != null ? item.bestScore : (opp.feasibilityScore || 0);
 //         html += `
 //             <tr onclick="selectOpportunity('${opp.sourceId}', '${opp.consumerId}')">
 //                 <td><strong>#${item.rank || index + 1}</strong></td>
@@ -1202,7 +1351,7 @@ function createFinancialChart(initialCost, annualSavings) {
 //                 <td>${consumerName}</td>
 //                 <td>${(opp.distanceKm || 0).toFixed(1)} km</td>
 //                 <td>${(opp.financialModel?.paybackYears || 0).toFixed(1)} yrs</td>
-//                 <td><span class="score-badge">${opp.feasibilityScore || 0}</span></td>
+//                 <td><span class="score-badge">${score}</span></td>
 //                 <td><button class="btn-small" onclick="event.stopPropagation(); selectOpportunity('${opp.sourceId}', '${opp.consumerId}')">
 //                     <i class="fas fa-eye"></i> View
 //                 </button></td>
@@ -1259,7 +1408,7 @@ window.selectSource = function(id) {
     selectedSourceId = id;
     const sourceSelect = document.getElementById('sourceSelect');
     if (sourceSelect) sourceSelect.value = id;
-    highlightSelected();
+    updateRangeCircleAndHighlights();
     updateCalculateButton();
 };
 
@@ -1267,6 +1416,6 @@ window.selectConsumer = function(id) {
     selectedConsumerId = id;
     const consumerSelect = document.getElementById('consumerSelect');
     if (consumerSelect) consumerSelect.value = id;
-    highlightSelected();
+    updateRangeCircleAndHighlights();
     updateCalculateButton();
 };

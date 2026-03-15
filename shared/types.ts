@@ -55,6 +55,8 @@ export type HeatExchangeOpportunity = {
 export type OpportunityRanking = {
   rank: number;
   opportunity: HeatExchangeOpportunity;
+  /** Best Score from formula (used to rank in-range opposing pairs); higher = better */
+  bestScore?: number;
 };
 
 export type CalculationAssumptions = {

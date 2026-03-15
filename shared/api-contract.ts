@@ -29,3 +29,15 @@ export type EvaluateOpportunityResponse = {
 export type GetRankedOpportunitiesResponse = {
   rankings: OpportunityRanking[];
 };
+
+/** Request ranked opportunities for a fixed source + list of consumers (or consumer + list of sources). */
+export type RankedOpportunitiesInRangeRequest = {
+  /** When set, rank (source, consumer) for each consumer in consumerIds */
+  sourceId?: string;
+  consumerIds?: string[];
+  /** When set, rank (source, consumer) for each source in sourceIds */
+  consumerId?: string;
+  sourceIds?: string[];
+};
+
+export type RankedOpportunitiesInRangeResponse = GetRankedOpportunitiesResponse;
