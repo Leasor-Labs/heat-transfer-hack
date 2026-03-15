@@ -35,7 +35,7 @@ frontend:
             echo "Injected HEATGRID_API_BASE_URL=$API_URL"
           fi
   artifacts:
-    baseDirectory: build
+    baseDirectory: heat-transfer-hack
     files:
       - '**/*'
   cache:
