@@ -33,13 +33,14 @@
         <div class="card search-section">
             <h3><i class="fas fa-search"></i> Find Heat Sources & Demands</h3>
             <div class="search-box">
-                <input type="text" id="locationSearch" placeholder="Enter city or region (e.g., Cleveland, OH)" value="Ohio">
+                <input type="text" id="locationSearch" placeholder="Enter city or region (e.g., Cleveland, OH)" value="">
                 <button id="searchBtn"><i class="fas fa-map-marker-alt"></i> Search</button>
             </div>
-            <p class="hint">
+            <!-- <p class="hint">
                 <i class="fas fa-info-circle"></i> 
-                Using Amazon Location Service for geocoding • Seed data shows Ohio facilities
-            </p>
+                Add a hint here if needed.
+            </p> -->
+            <div id="searchBanner" class="search-banner" role="alert" style="display: none;"></div>
         </div>
 
         <!-- Map Section -->

@@ -19,6 +19,25 @@ const OHIO_HEAT_CONSUMERS_FALLBACK = [
   { id: "ohio-consumer-5", name: "Akron Food Processing Plant", category: "Food Processing", latitude: 41.0865, longitude: -81.523, annualHeatDemandMWh: 4000 }
 ];
 
+// Same token logic as backend: "Toledo, Oh" -> ["toledo"], filter by name/industry/category
+function searchTokens(query) {
+  return (query || '').trim().toLowerCase().split(/[\s,]+/).filter(function(t) { return t.length > 0 && t !== 'oh'; });
+}
+function filterOhioSourcesByQuery(query) {
+  var tokens = searchTokens(query);
+  if (tokens.length === 0 || (tokens.length === 1 && tokens[0] === 'ohio')) return OHIO_HEAT_SOURCES_FALLBACK.slice();
+  return OHIO_HEAT_SOURCES_FALLBACK.filter(function(s) {
+    return tokens.some(function(t) { return s.name.toLowerCase().includes(t) || s.industry.toLowerCase().includes(t); });
+  });
+}
+function filterOhioConsumersByQuery(query) {
+  var tokens = searchTokens(query);
+  if (tokens.length === 0 || (tokens.length === 1 && tokens[0] === 'ohio')) return OHIO_HEAT_CONSUMERS_FALLBACK.slice();
+  return OHIO_HEAT_CONSUMERS_FALLBACK.filter(function(c) {
+    return tokens.some(function(t) { return c.name.toLowerCase().includes(t) || c.category.toLowerCase().includes(t); });
+  });
+}
+
 // Global variables
 let map;
 let sources = [];
@@ -32,24 +51,37 @@ let currentOpportunity = null;
 let allRankings = [];
 let mapInitialized = false;
 
+function showSearchBanner(message) {
+    const el = document.getElementById('searchBanner');
+    if (el) {
+        el.innerHTML = '<i class="fas fa-exclamation-circle"></i> ' + message;
+        el.style.display = 'flex';
+    }
+}
+
+function hideSearchBanner() {
+    const el = document.getElementById('searchBanner');
+    if (el) el.style.display = 'none';
+}
+
+// Show empty state when no search has been run (map and rankings driven by search only)
+function showEmptyRankingsMessage() {
+    const tbody = document.getElementById('rankingsBody');
+    if (tbody) {
+        tbody.innerHTML = '<tr><td colspan="7" class="loading"><i class="fas fa-search"></i> Search for a location above to see ranked opportunities</td></tr>';
+    }
+}
+
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', async () => {
     console.log('HeatGrid initializing...');
     
-    // Show loading states
-    showLoading('rankingsBody', 'Loading heat sources...');
-    document.getElementById('markerCounts').innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading...';
-    
-    // Initialize map with fallback
     await initMap();
     
-    // Load initial data (Ohio seed data)
-    await loadData();
+    document.getElementById('markerCounts').innerHTML = '<i class="fas fa-map-marker-alt"></i> Search above to see heat sources and consumers';
+    showEmptyRankingsMessage();
     
-    // Setup event listeners
     setupEventListeners();
-    
-    // Load rankings - removed to load only after calculate
 });
 
 // Show loading state helper
@@ -201,18 +233,18 @@ async function loadData(searchQuery = '') {
         if (sourcesResponse.ok) {
             sourcesData = await sourcesResponse.json();
         } else {
-            console.warn('API not available for sources, using Ohio seed fallback');
+            console.warn('API not available for sources');
         }
         
         if (consumersResponse.ok) {
             consumersData = await consumersResponse.json();
         } else {
-            console.warn('API not available for consumers, using Ohio seed fallback');
+            console.warn('API not available for consumers');
         }
         
-        // Update global variables; use Ohio fallback when API returned no data
-        sources = (sourcesData.heatSources && sourcesData.heatSources.length) ? (sourcesData.heatSources || []) : OHIO_HEAT_SOURCES_FALLBACK;
-        consumers = (consumersData.heatConsumers && consumersData.heatConsumers.length) ? (consumersData.heatConsumers || []) : OHIO_HEAT_CONSUMERS_FALLBACK;
+        // Use API response when request succeeded; if failed, use client-side filtered fallback so e.g. "Toledo" still shows
+        sources = sourcesResponse.ok ? (sourcesData.heatSources || []) : (searchQuery ? filterOhioSourcesByQuery(searchQuery) : []);
+        consumers = consumersResponse.ok ? (consumersData.heatConsumers || []) : (searchQuery ? filterOhioConsumersByQuery(searchQuery) : []);
         
         console.log(`Loaded ${sources.length} sources, ${consumers.length} consumers`);
         
@@ -223,19 +255,32 @@ async function loadData(searchQuery = '') {
         updateSelectors();
         updateMarkerCounts();
         
-        // Show message if no data
         if (sources.length === 0 && consumers.length === 0) {
+            showSearchBanner('No heat sources or consumers found. Try a different search.');
             showError('rankingsBody', 'No heat sources or consumers found. Try a different search.');
+        } else {
+            hideSearchBanner();
+            if (mapInitialized && (sources.length > 0 || consumers.length > 0)) {
+                fitMarkersToBounds();
+            }
         }
         
     } catch (error) {
         console.error('Error loading data:', error);
-        sources = OHIO_HEAT_SOURCES_FALLBACK;
-        consumers = OHIO_HEAT_CONSUMERS_FALLBACK;
+        sources = searchQuery ? filterOhioSourcesByQuery(searchQuery) : [];
+        consumers = searchQuery ? filterOhioConsumersByQuery(searchQuery) : [];
         if (mapInitialized) updateMarkers();
         updateSelectors();
         updateMarkerCounts();
-        showError('rankingsBody', 'Using Ohio seed data (API unavailable).');
+        if (sources.length === 0 && consumers.length === 0) {
+            showSearchBanner('Search failed or returned no results. Try again or a different search.');
+            showError('rankingsBody', 'Search failed or returned no results. Try again or a different search.');
+        } else {
+            hideSearchBanner();
+            if (mapInitialized && (sources.length > 0 || consumers.length > 0)) {
+                fitMarkersToBounds();
+            }
+        }
     }
 }
 
@@ -354,14 +399,24 @@ function updateMarkerCounts() {
 
 // Setup event listeners
 function setupEventListeners() {
-    // Search button
+    // Search button: blank = clear map; non-empty = load data and rankings
     const searchBtn = document.getElementById('searchBtn');
     if (searchBtn) {
         searchBtn.addEventListener('click', async () => {
-            const query = document.getElementById('locationSearch').value;
-            if (query) {
-                await loadData(query);
+            const query = (document.getElementById('locationSearch').value || '').trim();
+            if (!query) {
+                sources = [];
+                consumers = [];
+                hideSearchBanner();
+                if (mapInitialized) updateMarkers();
+                updateSelectors();
+                updateMarkerCounts();
+                showEmptyRankingsMessage();
+                document.getElementById('markerCounts').innerHTML = '<i class="fas fa-map-marker-alt"></i> Search above to see heat sources and consumers';
+                return;
             }
+            await loadData(query);
+            await loadRankings();
         });
     }
     
@@ -473,7 +528,7 @@ function highlightSelected() {
     }
 }
 
-// Fit map to show all markers
+// Fit map to show all markers (or zoom to city when single point)
 function fitMarkersToBounds() {
     if (!map || !mapInitialized) return;
     
@@ -492,7 +547,15 @@ function fitMarkersToBounds() {
         bounds.extend(marker.getLngLat());
     });
     
-    map.fitBounds(bounds, { padding: 50, duration: 1000 });
+    // If single point, expand bounds slightly so map zooms to a reasonable city-level view
+    if (!bounds.getNorth() || bounds.getSouth() === bounds.getNorth()) {
+        const c = bounds.getCenter();
+        const pad = 0.02;
+        bounds.extend([c.lng - pad, c.lat - pad]);
+        bounds.extend([c.lng + pad, c.lat + pad]);
+    }
+    
+    map.fitBounds(bounds, { padding: 50, duration: 3500, maxZoom: 14 });
 }
 
 // Calculate opportunity for selected source and consumer
@@ -795,7 +858,7 @@ function drawRoute(opp) {
             .extend([source.longitude, source.latitude])
             .extend([consumer.longitude, consumer.latitude]);
         
-        map.fitBounds(bounds, { padding: 100, duration: 1000 });
+        map.fitBounds(bounds, { padding: 100, duration: 3500 });
         
     } catch (error) {
         console.error('Error drawing route:', error);

@@ -9,18 +9,46 @@ import { DEFAULT_ASSUMPTIONS } from "../../shared/constants";
 const BASE_WASTE_HEAT_MWH = 5000;
 
 /**
+ * Extract meaningful location tokens from a search query (e.g. "Toledo, Oh" -> ["toledo", "oh"]).
+ * Used to match against source name/industry so "Toledo, Oh" matches "Toledo Glass Factory".
+ */
+function searchTokens(query: string): string[] {
+  return query
+    .trim()
+    .toLowerCase()
+    .split(/[\s,]+/)
+    .filter((t) => t.length > 0 && t !== "oh");
+}
+
+/**
+ * Filter Ohio seed sources by search query.
+ * Matches if name or industry contains any token from the query (e.g. "Toledo, Oh" -> match "Toledo").
+ * If query is empty or only "ohio", returns all.
+ */
+function filterOhioSourcesByQuery(query: string): HeatSource[] {
+  const tokens = searchTokens(query);
+  if (tokens.length === 0 || (tokens.length === 1 && tokens[0] === "ohio"))
+    return [...HEAT_SOURCES_OHIO];
+  const nameLower = (s: HeatSource) => s.name.toLowerCase();
+  const industryLower = (s: HeatSource) => s.industry.toLowerCase();
+  return HEAT_SOURCES_OHIO.filter((s) =>
+    tokens.some(
+      (t) => nameLower(s).includes(t) || industryLower(s).includes(t)
+    )
+  );
+}
+
+/**
  * Returns heat sources for the backend API.
- * If Amazon Location Service is configured (PLACE_INDEX_NAME), optionally
- * augments with places from a search; otherwise returns Ohio seed data.
+ * If Amazon Location Service is configured (PLACE_INDEX_NAME), returns places from search;
+ * otherwise returns Ohio seed data filtered by locationSearchQuery so only the searched area shows.
  */
 export async function getHeatSources(options?: {
   locationSearchQuery?: string;
 }): Promise<HeatSource[]> {
-  if (
-    isLocationServiceConfigured() &&
-    options?.locationSearchQuery?.trim()
-  ) {
-    const places = await searchPlacesByText(options.locationSearchQuery, {
+  const query = options?.locationSearchQuery?.trim() ?? "";
+  if (isLocationServiceConfigured() && query) {
+    const places = await searchPlacesByText(options!.locationSearchQuery!, {
       maxResults: 10,
     });
     if (places.length > 0) {
@@ -41,7 +69,7 @@ export async function getHeatSources(options?: {
       }));
     }
   }
-  return [...HEAT_SOURCES_OHIO];
+  return filterOhioSourcesByQuery(query);
 }
 
 /**

@@ -8,18 +8,44 @@ import {
 const BASE_HEAT_DEMAND_MWH = 3000;
 
 /**
+ * Extract meaningful location tokens from a search query (e.g. "Toledo, Oh" -> ["toledo", "oh"]).
+ */
+function searchTokens(query: string): string[] {
+  return query
+    .trim()
+    .toLowerCase()
+    .split(/[\s,]+/)
+    .filter((t) => t.length > 0 && t !== "oh");
+}
+
+/**
+ * Filter Ohio seed consumers by search query.
+ * Matches if name or category contains any token (e.g. "Toledo, Oh" -> match "Toledo").
+ */
+function filterOhioConsumersByQuery(query: string): HeatConsumer[] {
+  const tokens = searchTokens(query);
+  if (tokens.length === 0 || (tokens.length === 1 && tokens[0] === "ohio"))
+    return [...HEAT_CONSUMERS_OHIO];
+  const nameLower = (c: HeatConsumer) => c.name.toLowerCase();
+  const categoryLower = (c: HeatConsumer) => c.category.toLowerCase();
+  return HEAT_CONSUMERS_OHIO.filter((c) =>
+    tokens.some(
+      (t) => nameLower(c).includes(t) || categoryLower(c).includes(t)
+    )
+  );
+}
+
+/**
  * Returns heat consumers for the backend API.
- * If Amazon Location Service is configured and a search query is provided,
- * augments with places from search; otherwise returns Ohio seed data.
+ * If Amazon Location Service is configured, returns places from search;
+ * otherwise returns Ohio seed data filtered by locationSearchQuery so only the searched area shows.
  */
 export async function getHeatConsumers(options?: {
   locationSearchQuery?: string;
 }): Promise<HeatConsumer[]> {
-  if (
-    isLocationServiceConfigured() &&
-    options?.locationSearchQuery?.trim()
-  ) {
-    const places = await searchPlacesByText(options.locationSearchQuery, {
+  const query = options?.locationSearchQuery?.trim() ?? "";
+  if (isLocationServiceConfigured() && query) {
+    const places = await searchPlacesByText(options!.locationSearchQuery!, {
       maxResults: 10,
     });
     if (places.length > 0) {
@@ -33,7 +59,7 @@ export async function getHeatConsumers(options?: {
       }));
     }
   }
-  return [...HEAT_CONSUMERS_OHIO];
+  return filterOhioConsumersByQuery(query);
 }
 
 /**
