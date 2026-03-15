@@ -4,13 +4,18 @@ import {
   searchPlacesByText,
   isLocationServiceConfigured,
 } from "./location-service";
+import { HEAT_CONSUMERS_TABLE } from "../api/dynamo";
+import {
+  fetchHeatConsumersFromDynamo,
+  fetchHeatConsumerByIdFromDynamo,
+} from "../api/dynamo-heat-consumers";
 
 const BASE_HEAT_DEMAND_MWH = 3000;
 
 /**
  * Returns heat consumers for the backend API.
- * If Amazon Location Service is configured and a search query is provided,
- * augments with places from search; otherwise returns Ohio seed data.
+ * When DynamoDB is configured (HEAT_CONSUMERS_TABLE), uses DynamoDB unless
+ * Location search is requested and configured. Otherwise returns Ohio seed data.
  */
 export async function getHeatConsumers(options?: {
   locationSearchQuery?: string;
@@ -33,12 +38,19 @@ export async function getHeatConsumers(options?: {
       }));
     }
   }
+  if (HEAT_CONSUMERS_TABLE) {
+    return fetchHeatConsumersFromDynamo();
+  }
   return [...HEAT_CONSUMERS_OHIO];
 }
 
 /**
- * Resolve a single heat consumer by id. Uses seed data only (stable ids).
+ * Resolve a single heat consumer by id. Uses DynamoDB when configured, else Ohio seed.
  */
-export function getHeatConsumerById(id: string): HeatConsumer | null {
+export async function getHeatConsumerById(id: string): Promise<HeatConsumer | null> {
+  if (HEAT_CONSUMERS_TABLE) {
+    const fromDynamo = await fetchHeatConsumerByIdFromDynamo(id);
+    if (fromDynamo) return fromDynamo;
+  }
   return HEAT_CONSUMERS_OHIO.find((c) => c.id === id) ?? null;
 }
